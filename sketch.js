@@ -107,6 +107,9 @@ function setup() {
 			config.cellwidth = pg.width / config.cols;
 			config.bgColor = pallet[0]; // darkest palette color
 			config.smears = randomInt(R, 4, 12);
+			config.vigStrength = 0.3 + R() * 0.6; // 0.3–0.9
+			config.grainAmt = 4 + R() * 14; // 4–18 per channel
+			config.grainSeed = Math.round(R() * 0xffffffff);
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
@@ -147,6 +150,8 @@ function setup() {
 				yPos += rowHeights[y];
 			}
 
+			console.log("cells:", cells);
+
 			const totalCells = config.cols * config.rows;
 			const density =
 				totalCells < 120 ? "Sparse" : totalCells < 500 ? "Medium" : "Dense";
@@ -154,10 +159,18 @@ function setup() {
 			const flow =
 				flowRatio > 0.7 ? "Horizontal" : flowRatio < 0.3 ? "Vertical" : "Mixed";
 
+			const vibe =
+				config.vigStrength < 0.45
+					? "Open"
+					: config.vigStrength < 0.65
+						? "Focused"
+						: "Dramatic";
+
 			$fx.features({
 				Pallet: "Pallet " + config.pallet,
 				Density: density,
 				Flow: flow,
+				Vibe: vibe,
 			});
 			console.log(
 				"seed:",
@@ -248,6 +261,54 @@ function smear(source, x, y, w = 100, h = 100, d = 2) {
 	source.updatePixels();
 }
 
+/**
+ * Applies vignette and film grain to a graphics buffer in a single pixel pass.
+ * Vignette blends each pixel toward bgHex based on distance from center.
+ * Grain adds deterministic per-pixel luminance noise using a seeded RNG.
+ * @param {p5.Graphics} source
+ * @param {string} bgHex - darkest palette color, used for vignette target
+ * @param {number} vigStrength - 0–1, how strongly the vignette blends (0=none, 1=full black edges)
+ * @param {number} grainAmt - max per-channel noise in 0–255 range
+ * @param {number} grainSeed - integer seed for the grain RNG (deterministic)
+ */
+function applyPostProcess(source, bgHex, vigStrength, grainAmt, grainSeed) {
+	source.loadPixels();
+	const w = source.width,
+		h = source.height;
+	const cx = w * 0.5,
+		cy = h * 0.5;
+	const [dr, dg, db] = chroma(bgHex).rgb();
+	const pix = source.pixels;
+	const grain = createRng(grainSeed);
+
+	for (let y = 0; y < h; y++) {
+		const ny = (y - cy) / cy;
+		const ny2 = ny * ny;
+		for (let x = 0; x < w; x++) {
+			const nx = (x - cx) / cx;
+			// Use squared distance to avoid sqrt — smooth ramp from r=0.5 to r=1.2
+			const distSq = nx * nx + ny2;
+			const vig =
+				Math.min(1, Math.max(0, (distSq - 0.25) / 1.19)) * vigStrength;
+			const noise = (grain() - 0.5) * 2 * grainAmt;
+			const idx = (y * w + x) << 2;
+			pix[idx] = Math.min(
+				255,
+				Math.max(0, (pix[idx] + (dr - pix[idx]) * vig + noise) | 0),
+			);
+			pix[idx + 1] = Math.min(
+				255,
+				Math.max(0, (pix[idx + 1] + (dg - pix[idx + 1]) * vig + noise) | 0),
+			);
+			pix[idx + 2] = Math.min(
+				255,
+				Math.max(0, (pix[idx + 2] + (db - pix[idx + 2]) * vig + noise) | 0),
+			);
+		}
+	}
+	source.updatePixels();
+}
+
 function draw() {
 	if (!pallet) return;
 	background(config.bgColor || "#111");
@@ -298,6 +359,15 @@ function draw() {
 			randomInt(R, 1, 4),
 		);
 	}
+
+	// Vignette + film grain in a single pixel pass
+	applyPostProcess(
+		pg,
+		config.bgColor || "#111",
+		config.vigStrength,
+		config.grainAmt,
+		config.grainSeed,
+	);
 
 	image(pg, 0, 0, width, height);
 

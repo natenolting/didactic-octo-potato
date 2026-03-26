@@ -1,5 +1,6 @@
 .claude
-.playwrite-mcp
+.playwright-mcp/
 .vscode
 .DS_Store
 Thumbs.db
+screen*.png
