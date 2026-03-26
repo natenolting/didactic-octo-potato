@@ -100,27 +100,53 @@ function setup() {
 			pallet.push(suggestColor(pallet));
 			pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
 
-			config.cols = randomInt(R, 10, 100);
-			config.rows = randomInt(R, 10, 100);
+			config.cols = randomInt(R, 10, 55);
+			config.rows = randomInt(R, 6, 40);
 			config.cellwidth = pg.width / config.cols;
-			config.cellheight = pg.height / config.rows;
+			config.bgColor = pallet[0]; // darkest palette color
 
+			// Variable row heights — random weights, normalized to fill pg.height exactly.
+			const GAP = 2; // px gap between rows (shows bgColor)
+			const rawH = Array.from({length: config.rows}, () => 0.3 + R() * 1.7);
+			const totalRaw = rawH.reduce((a, b) => a + b, 0);
+			const rowHeights = rawH.map(h => Math.max(3, Math.round((h / totalRaw) * pg.height)));
+			const hDrift = pg.height - rowHeights.reduce((a, b) => a + b, 0);
+			rowHeights[rowHeights.length - 1] = Math.max(3, rowHeights[rowHeights.length - 1] + hDrift);
+
+			const MODES = ['lab', 'lch', 'hsl'];
+			let hCount = 0, vCount = 0;
+			let yPos = 0;
 			for (let y = 0; y < config.rows; y++) {
-				for (let x = 0; x < config.cols; x++) {
-					let cell = {
-						x: x * config.cellwidth,
-						y: y * config.cellheight,
+				const cellH = Math.max(2, rowHeights[y] - GAP);
+				const brickOffset = y % 2 === 1 ? config.cellwidth * 0.5 : 0;
+				const dir = R() < 0.6 ? 'h' : 'v';
+				const mode = MODES[randomInt(R, 0, MODES.length - 1)];
+				dir === 'h' ? hCount++ : vCount++;
+
+				// Odd rows get one extra cell so the brick offset doesn't gap on the right
+				const numCols = y % 2 === 1 ? config.cols + 1 : config.cols;
+				for (let x = 0; x < numCols; x++) {
+					cells.push({
+						x: x * config.cellwidth - brickOffset,
+						y: yPos,
 						w: config.cellwidth,
-						h: config.cellheight,
-					};
-					cells.push(cell);
+						h: cellH,
+						dir,
+						mode,
+					});
 				}
+				yPos += rowHeights[y];
 			}
+
+			const totalCells = config.cols * config.rows;
+			const density = totalCells < 120 ? 'Sparse' : totalCells < 500 ? 'Medium' : 'Dense';
+			const flowRatio = hCount / config.rows;
+			const flow = flowRatio > 0.7 ? 'Horizontal' : flowRatio < 0.3 ? 'Vertical' : 'Mixed';
 
 			$fx.features({
 				Pallet: "Pallet " + config.pallet,
-				Cols: config.cols,
-				Rows: config.rows,
+				Density: density,
+				Flow: flow,
 			});
 			console.log(
 				"seed:",
@@ -135,8 +161,8 @@ function setup() {
 
 function draw() {
 	if (!pallet) return;
-	background(111);
-	pg.background(255);
+	background(config.bgColor || '#111');
+	pg.background(config.bgColor || '#111');
 	pg.noStroke();
 	let newpallet = [...pallet];
 	let cc = 0;
@@ -145,10 +171,18 @@ function draw() {
 		let fc = newpallet[cc % newpallet.length];
 		let nc = newpallet[(cc + 1) % newpallet.length];
 
-		for (let g = 0; g < cell.w; g++) {
-			let inter = g / cell.w;
-			pg.fill(chroma.mix(fc, nc, inter, "lab").hex());
-			pg.rect(cell.x + g, cell.y, 1, cell.h);
+		if (cell.dir === 'v') {
+			for (let g = 0; g < cell.h; g++) {
+				let inter = g / cell.h;
+				pg.fill(chroma.mix(fc, nc, inter, cell.mode).hex());
+				pg.rect(cell.x, cell.y + g, cell.w, 1);
+			}
+		} else {
+			for (let g = 0; g < cell.w; g++) {
+				let inter = g / cell.w;
+				pg.fill(chroma.mix(fc, nc, inter, cell.mode).hex());
+				pg.rect(cell.x + g, cell.y, 1, cell.h);
+			}
 		}
 
 		if (i % newpallet.length === newpallet.length - 1) {
