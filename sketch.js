@@ -107,6 +107,7 @@ function setup() {
 			config.cellwidth = pg.width / config.cols;
 			config.bgColor = pallet[0]; // darkest palette color
 			config.smears = randomInt(R, 4, 12);
+			config.squareWaves = randomInt(R, 2, 4);
 			config.vigStrength = 0.3 + R() * 0.6; // 0.3–0.9
 			config.grainAmt = 4 + R() * 14; // 4–18 per channel
 			config.grainSeed = Math.round(R() * 0xffffffff);
@@ -309,6 +310,84 @@ function applyPostProcess(source, bgHex, vigStrength, grainAmt, grainSeed) {
 	source.updatePixels();
 }
 
+/**
+ * Draws a single square wave across one row of the cell grid.
+ * Picks a row to start from using Perlin noise, then walks its cells
+ * left-to-right, stair-stepping between top and bottom edges at each
+ * cell boundary based on Perlin noise.
+ * @param {p5.Graphics} graphics - Target graphics buffer.
+ * @param {Array<{x:number,y:number,w:number,h:number}>} cellList - All cells.
+ * @param {string[]} pal - Palette array sorted darkest-to-lightest.
+ * @param {{cellwidth:number}} cfg - Config object.
+ */
+function drawSquareWave(graphics, cellList, pal, waveIndex = 0) {
+	const noiseScale = 0.28;
+	// Unique offset per wave so each one picks a different row and path.
+	const wo = waveIndex * 13.7;
+
+	// Group cells into rows sorted top-to-bottom.
+	const rowMap = new Map();
+	for (const cell of cellList) {
+		if (!rowMap.has(cell.y)) rowMap.set(cell.y, []);
+		rowMap.get(cell.y).push(cell);
+	}
+	const sortedRows = [...rowMap.entries()]
+		.sort(([a], [b]) => a - b)
+		.map(([, rowCells]) => rowCells.sort((a, b) => a.x - b.x));
+
+	// Pick starting row using noise offset by waveIndex.
+	const ri = floor(noise(42 + wo, 7 + wo) * sortedRows.length);
+	const rowCells = sortedRows[ri]; // x-column structure comes from this row
+	if (!rowCells || rowCells.length === 0) return;
+
+	// Active row index — the wave can drift up/down through rows as it walks.
+	let rowIdx = ri;
+
+	// Starting edge: noise decides top or bottom of the first cell.
+	const startHigh = noise(wo, ri * noiseScale + wo) > 0.5;
+	let curY = startHigh
+		? sortedRows[rowIdx][0].y
+		: sortedRows[rowIdx][0].y + sortedRows[rowIdx][0].h;
+
+	const [fr, fg, fb] = chroma(pal[randomInt(R, 0, pal.length - 1)]).rgb();
+	const gh = graphics.height;
+	const ctx = graphics.drawingContext;
+
+	for (let ci = 0; ci < rowCells.length; ci++) {
+		const cell = rowCells[ci];
+
+		// Use the native canvas gradient — one fillRect, no strips, no gaps.
+		const grad = ctx.createLinearGradient(0, curY, 0, gh);
+		grad.addColorStop(0, `rgba(${fr},${fg},${fb},1)`);
+		grad.addColorStop(0.25, `rgba(${fr},${fg},${fb},.75)`);
+		grad.addColorStop(0.5, `rgba(${fr},${fg},${fb},.25)`);
+		grad.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+		ctx.fillStyle = grad;
+		ctx.fillRect(cell.x, curY, cell.w, gh - curY);
+
+		if (ci < rowCells.length - 1) {
+			// At the junction, noise decides: continue / jump to row above / jump to row below.
+			const n = noise((ci + 1) * noiseScale + wo, rowIdx * noiseScale + wo);
+			let nextY = curY;
+
+			if (n < 0.33 && rowIdx > 0) {
+				// Jump up — land on the TOP edge of the row above.
+				rowIdx--;
+				const above = sortedRows[rowIdx];
+				nextY = above[min(ci + 1, above.length - 1)].y;
+			} else if (n > 0.67 && rowIdx < sortedRows.length - 1) {
+				// Jump down — land on the BOTTOM edge of the row below.
+				rowIdx++;
+				const below = sortedRows[rowIdx];
+				nextY =
+					below[min(ci + 1, below.length - 1)].y +
+					below[min(ci + 1, below.length - 1)].h;
+			}
+			curY = nextY;
+		}
+	}
+}
+
 function draw() {
 	if (!pallet) return;
 	background(config.bgColor || "#111");
@@ -358,6 +437,11 @@ function draw() {
 			randomInt(R, 0, config.height * 2),
 			randomInt(R, 1, 4),
 		);
+	}
+
+	// square wave
+	for (let i = 0; i < config.squareWaves; i++) {
+		drawSquareWave(pg, cells, pallet, i);
 	}
 
 	// Vignette + film grain in a single pixel pass
