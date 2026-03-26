@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Palette Explorer</title>
+  <script src="chroma.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #1a1a1a;
+      color: #eee;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 2rem;
+      color: #aaa;
+    }
+
+    /* Palette swatches */
+    #swatches {
+      display: flex;
+      gap: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      height: 180px;
+      margin-bottom: 2.5rem;
+    }
+
+    .swatch {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding-bottom: 14px;
+      transition: flex 0.3s ease;
+      position: relative;
+      cursor: default;
+    }
+
+    .swatch:hover { flex: 2; }
+
+    .swatch-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 3px 7px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.35);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .swatch:hover .swatch-label { opacity: 1; }
+
+    .swatch-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 0.6rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.4);
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    /* Form */
+    form {
+      background: #252525;
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-width: 640px;
+    }
+
+    form h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 1.25rem;
+    }
+
+    #color-inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .color-row label {
+      font-size: 0.75rem;
+      color: #777;
+      width: 52px;
+      flex-shrink: 0;
+    }
+
+    .color-row input[type="color"] {
+      width: 40px;
+      height: 32px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 2px;
+      background: #333;
+    }
+
+    .color-row input[type="text"] {
+      flex: 1;
+      background: #333;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #eee;
+      font-size: 0.85rem;
+      font-family: monospace;
+      letter-spacing: 0.05em;
+    }
+
+    .color-row input[type="text"]:focus {
+      outline: none;
+      border-color: #666;
+    }
+
+    .color-row .remove-btn {
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px 6px;
+      border-radius: 4px;
+      transition: color 0.15s;
+    }
+
+    .color-row .remove-btn:hover { color: #e05; }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 8px 16px;
+      border-radius: 7px;
+      border: none;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+
+    #btn-add    { background: #333; color: #ccc; }
+    #btn-suggest { background: #3a3a3a; color: #aef; border: 1px solid #4af; }
+    #btn-apply  { background: #f38630; color: #fff; }
+
+    #array-import {
+      margin-bottom: 1.25rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid #333;
+    }
+
+    #array-import label {
+      display: block;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #777;
+      margin-bottom: 0.5rem;
+    }
+
+    #array-import-row {
+      display: flex;
+      gap: 0.6rem;
+    }
+
+    #array-input {
+      flex: 1;
+      background: #333;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 7px 10px;
+      color: #eee;
+      font-size: 0.8rem;
+      font-family: monospace;
+      letter-spacing: 0.03em;
+    }
+
+    #array-input:focus { outline: none; border-color: #666; }
+    #array-input.error { border-color: #e05; }
+
+    #btn-import { background: #333; color: #ccc; white-space: nowrap; }
+
+    #array-error {
+      font-size: 0.72rem;
+      color: #e05;
+      margin-top: 0.4rem;
+      min-height: 1em;
+    }
+
+    #suggestion-row {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: #2e2e2e;
+      border-radius: 8px;
+      border: 1px solid #3a3a3a;
+    }
+
+    #suggestion-row.visible { display: flex; }
+
+    #suggestion-swatch {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    #suggestion-text {
+      flex: 1;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    #suggestion-text strong {
+      color: #eee;
+      font-family: monospace;
+    }
+
+    #btn-use-suggestion {
+      background: #2a4a2a;
+      color: #8f8;
+      border: 1px solid #4a8;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Palette Explorer</h1>
+
+<div id="swatches"></div>
+
+<form id="palette-form">
+  <h2>Edit Palette</h2>
+  <div id="array-import">
+    <label for="array-input">Import from array</label>
+    <div id="array-import-row">
+      <input type="text" id="array-input" placeholder='["#69d2e7","#a7dbd8","#e0e4cc","#f38630","#fa6900"]'>
+      <button type="button" id="btn-import">Import</button>
+    </div>
+    <div id="array-error"></div>
+  </div>
+
+  <div id="color-inputs"></div>
+
+  <div class="btn-row">
+    <button type="button" id="btn-add">+ Add Color</button>
+    <button type="button" id="btn-suggest">Suggest 6th Color</button>
+    <button type="submit" id="btn-apply">Apply</button>
+  </div>
+
+  <div id="suggestion-row">
+    <div id="suggestion-swatch"></div>
+    <div id="suggestion-text"></div>
+    <button type="button" id="btn-use-suggestion">Use This</button>
+  </div>
+</form>
+
+<script>
+  const DEFAULT_PALETTE = ["#69d2e7","#a7dbd8","#e0e4cc","#f38630","#fa6900"];
+
+  let palette = [...DEFAULT_PALETTE];
+
+  // ── Rendering ────────────────────────────────────────────────────
+
+  function renderSwatches() {
+    const container = document.getElementById('swatches');
+    container.innerHTML = '';
+    const sorted = palette
+      .map((hex, i) => ({ hex, originalIndex: i }))
+      .sort((a, b) => chroma(b.hex).luminance() - chroma(a.hex).luminance());
+    sorted.forEach(({ hex, originalIndex }) => {
+      const div = document.createElement('div');
+      div.className = 'swatch';
+      div.style.background = hex;
+      const textColor = chroma(hex).luminance() > 0.4 ? '#0006' : '#fff9';
+      div.innerHTML = `
+        <span class="swatch-badge" style="color:${textColor};background:rgba(${chroma(hex).luminance()>0.4?'255,255,255':'0,0,0'},.25)">Color ${originalIndex+1}</span>
+        <span class="swatch-label" style="color:${textColor}">${hex}</span>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  function renderInputs() {
+    const container = document.getElementById('color-inputs');
+    container.innerHTML = '';
+    palette.forEach((hex, i) => {
+      const row = document.createElement('div');
+      row.className = 'color-row';
+      row.dataset.index = i;
+      row.innerHTML = `
+        <label>Color ${i+1}</label>
+        <input type="color" value="${hex}" data-index="${i}">
+        <input type="text" value="${hex}" maxlength="7" data-index="${i}" placeholder="#rrggbb">
+        <button type="button" class="remove-btn" data-index="${i}" title="Remove">×</button>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  function ordinal(n) {
+    const s = ['th','st','nd','rd'], v = n % 100;
+    return n + (s[(v-20)%10] || s[v] || s[0]);
+  }
+
+  function render() {
+    renderSwatches();
+    renderInputs();
+    document.getElementById('btn-suggest').textContent =
+      `Suggest ${ordinal(palette.length + 1)} Color`;
+  }
+
+  // ── Suggestion ───────────────────────────────────────────────────
+
+  // Average hue accounting for circular wrap (0–360)
+  function avgHue(hues) {
+    const sin = hues.reduce((s, h) => s + Math.sin(h * Math.PI / 180), 0);
+    const cos = hues.reduce((s, h) => s + Math.cos(h * Math.PI / 180), 0);
+    return (Math.atan2(sin / hues.length, cos / hues.length) * 180 / Math.PI + 360) % 360;
+  }
+
+  function suggestColor(pal) {
+    const DARK_THRESHOLD  = 0.10;
+    const LIGHT_THRESHOLD = 0.60;
+
+    const lums = pal.map(c => chroma(c).luminance());
+    const hasDark  = lums.some(l => l < DARK_THRESHOLD);
+    const hasLight = lums.some(l => l > LIGHT_THRESHOLD);
+
+    const lchs = pal.map(c => chroma(c).lch());
+
+    // Find the largest gap in hue space (circular) and use its midpoint
+    // so the new hue is as far as possible from all existing hues.
+    const hues = lchs.map(lch => lch[2]).sort((a, b) => a - b);
+    let maxHueGap = 0, gapStart = hues[hues.length - 1];
+    for (let i = 0; i < hues.length; i++) {
+      const next = hues[(i + 1) % hues.length];
+      const gap = (next - hues[i] + 360) % 360;
+      if (gap > maxHueGap) { maxHueGap = gap; gapStart = hues[i]; }
+    }
+    const novelH = (gapStart + maxHueGap / 2) % 360;
+
+    // Use average chroma of the palette as a baseline for the new color
+    const avgC = lchs.reduce((s, lch) => s + lch[1], 0) / lchs.length;
+
+    if (!hasDark) {
+      return {
+        hex: chroma.lch(18, Math.min(avgC * 0.9, 45), novelH).hex(),
+        reason: `No dark values (min luminance ${Math.round(Math.min(...lums)*100)}%) — suggested a deep tone at hue ${Math.round(novelH)}°, the largest gap in the palette's hue wheel.`
+      };
+    }
+
+    if (!hasLight) {
+      return {
+        hex: chroma.lch(92, Math.min(avgC * 0.3, 18), novelH).hex(),
+        reason: `No light values (max luminance ${Math.round(Math.max(...lums)*100)}%) — suggested a pale tone at hue ${Math.round(novelH)}°, the largest gap in the palette's hue wheel.`
+      };
+    }
+
+    // Dark and light both present — pick a mid-luminance color at the novel hue
+    const avgL = lchs.reduce((s, lch) => s + lch[0], 0) / lchs.length;
+    return {
+      hex: chroma.lch(avgL, avgC, novelH).hex(),
+      reason: `Palette spans dark to light — suggested a mid-tone at hue ${Math.round(novelH)}°, the largest gap in the palette's hue wheel.`
+    };
+  }
+
+  // ── Events ───────────────────────────────────────────────────────
+
+  // Sync color picker → text input & live swatch preview
+  document.getElementById('color-inputs').addEventListener('input', e => {
+    const idx = +e.target.dataset.index;
+    const row = e.target.closest('.color-row');
+    const picker = row.querySelector('input[type="color"]');
+    const text   = row.querySelector('input[type="text"]');
+
+    if (e.target.type === 'color') {
+      text.value = e.target.value;
+    } else {
+      const val = e.target.value.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(val)) picker.value = val;
+    }
+  });
+
+  // Remove color
+  document.getElementById('color-inputs').addEventListener('click', e => {
+    if (e.target.classList.contains('remove-btn')) {
+      const idx = +e.target.dataset.index;
+      if (palette.length <= 2) return;
+      palette.splice(idx, 1);
+      render();
+    }
+  });
+
+  // Add color
+  document.getElementById('btn-add').addEventListener('click', () => {
+    palette.push('#888888');
+    render();
+    // Focus new text input
+    const inputs = document.querySelectorAll('#color-inputs .color-row');
+    inputs[inputs.length-1].querySelector('input[type="text"]').focus();
+  });
+
+  // Suggest
+  document.getElementById('btn-suggest').addEventListener('click', () => {
+    const current = collectPalette();
+    if (!current) return;
+    const { hex, reason } = suggestColor(current);
+    const row = document.getElementById('suggestion-row');
+    document.getElementById('suggestion-swatch').style.background = hex;
+    document.getElementById('suggestion-text').innerHTML =
+      `Suggested: <strong>${hex}</strong> — ${reason}`;
+    row.classList.add('visible');
+    row._suggested = hex;
+  });
+
+  // Use suggestion
+  document.getElementById('btn-use-suggestion').addEventListener('click', () => {
+    const hex = document.getElementById('suggestion-row')._suggested;
+    if (!hex) return;
+    palette.push(hex);
+    render();
+    document.getElementById('suggestion-row').classList.remove('visible');
+  });
+
+  // Apply form → re-render swatches
+  document.getElementById('palette-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const updated = collectPalette();
+    if (updated) { palette = updated; render(); }
+  });
+
+  function collectPalette() {
+    const rows = document.querySelectorAll('#color-inputs .color-row');
+    const result = [];
+    for (const row of rows) {
+      const val = row.querySelector('input[type="text"]').value.trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(val)) {
+        row.querySelector('input[type="text"]').style.borderColor = '#e05';
+        return null;
+      }
+      row.querySelector('input[type="text"]').style.borderColor = '';
+      result.push(val.toLowerCase());
+    }
+    return result;
+  }
+
+  // ── Array import ─────────────────────────────────────────────────
+
+  document.getElementById('btn-import').addEventListener('click', () => {
+    const input = document.getElementById('array-input');
+    const errEl = document.getElementById('array-error');
+    const raw = input.value.trim();
+    input.classList.remove('error');
+    errEl.textContent = '';
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // try relaxed parse: allow single quotes and unquoted values
+      try {
+        parsed = JSON.parse(raw.replace(/'/g, '"'));
+      } catch {
+        input.classList.add('error');
+        errEl.textContent = 'Invalid format. Use ["#rrggbb", ...] or [\'#rrggbb\', ...]';
+        return;
+      }
+    }
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      input.classList.add('error');
+      errEl.textContent = 'Must be a non-empty array.';
+      return;
+    }
+
+    const valid = parsed.filter(v => /^#[0-9a-fA-F]{6}$/i.test(String(v).trim()));
+    if (valid.length !== parsed.length) {
+      const bad = parsed.filter(v => !/^#[0-9a-fA-F]{6}$/i.test(String(v).trim()));
+      input.classList.add('error');
+      errEl.textContent = `Invalid hex value(s): ${bad.join(', ')}`;
+      return;
+    }
+
+    palette = valid.map(v => v.toLowerCase());
+    render();
+    input.value = '';
+  });
+
+  // Allow pressing Enter in the import field
+  document.getElementById('array-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-import').click(); }
+  });
+
+  // ── Init ─────────────────────────────────────────────────────────
+  render();
+</script>
+</body>
+</html>
