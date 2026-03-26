@@ -88,7 +88,9 @@ function canvasSize() {
 function setup() {
 	const { w, h } = canvasSize();
 	createCanvas(w, h);
-	pg = createGraphics(1920, 1080);
+	config.width = 1920;
+	config.height = 1080;
+	pg = createGraphics(config.width, config.height);
 	noLoop();
 	fetch("1000.json")
 		.then((res) => res.json())
@@ -104,24 +106,31 @@ function setup() {
 			config.rows = randomInt(R, 6, 40);
 			config.cellwidth = pg.width / config.cols;
 			config.bgColor = pallet[0]; // darkest palette color
+			config.smears = randomInt(R, 4, 12);
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
-			const GAP = 2; // px gap between rows (shows bgColor)
-			const rawH = Array.from({length: config.rows}, () => 0.3 + R() * 1.7);
+			const GAP = 0; // px gap between rows (shows bgColor)
+			const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
 			const totalRaw = rawH.reduce((a, b) => a + b, 0);
-			const rowHeights = rawH.map(h => Math.max(3, Math.round((h / totalRaw) * pg.height)));
+			const rowHeights = rawH.map((h) =>
+				Math.max(3, Math.round((h / totalRaw) * pg.height)),
+			);
 			const hDrift = pg.height - rowHeights.reduce((a, b) => a + b, 0);
-			rowHeights[rowHeights.length - 1] = Math.max(3, rowHeights[rowHeights.length - 1] + hDrift);
+			rowHeights[rowHeights.length - 1] = Math.max(
+				3,
+				rowHeights[rowHeights.length - 1] + hDrift,
+			);
 
-			const MODES = ['lab', 'lch', 'hsl'];
-			let hCount = 0, vCount = 0;
+			const MODES = ["lab", "lch", "hsl"];
+			let hCount = 0,
+				vCount = 0;
 			let yPos = 0;
 			for (let y = 0; y < config.rows; y++) {
 				const cellH = Math.max(2, rowHeights[y] - GAP);
 				const brickOffset = y % 2 === 1 ? config.cellwidth * 0.5 : 0;
-				const dir = R() < 0.6 ? 'h' : 'v';
+				const dir = R() < 0.6 ? "h" : "v";
 				const mode = MODES[randomInt(R, 0, MODES.length - 1)];
-				dir === 'h' ? hCount++ : vCount++;
+				dir === "h" ? hCount++ : vCount++;
 
 				// Odd rows get one extra cell so the brick offset doesn't gap on the right
 				const numCols = y % 2 === 1 ? config.cols + 1 : config.cols;
@@ -139,9 +148,11 @@ function setup() {
 			}
 
 			const totalCells = config.cols * config.rows;
-			const density = totalCells < 120 ? 'Sparse' : totalCells < 500 ? 'Medium' : 'Dense';
+			const density =
+				totalCells < 120 ? "Sparse" : totalCells < 500 ? "Medium" : "Dense";
 			const flowRatio = hCount / config.rows;
-			const flow = flowRatio > 0.7 ? 'Horizontal' : flowRatio < 0.3 ? 'Vertical' : 'Mixed';
+			const flow =
+				flowRatio > 0.7 ? "Horizontal" : flowRatio < 0.3 ? "Vertical" : "Mixed";
 
 			$fx.features({
 				Pallet: "Pallet " + config.pallet,
@@ -159,10 +170,88 @@ function setup() {
 		});
 }
 
+function smear(source, x, y, w = 100, h = 100, d = 2) {
+	source.loadPixels();
+	const pw = source.width;
+	const ph = source.height;
+	const pixels = source.pixels;
+
+	function getPixel(px, py) {
+		if (px < 0 || px >= pw || py < 0 || py >= ph) return null;
+		const idx = (py * pw + px) * 4;
+		return [pixels[idx], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3]];
+	}
+
+	function setPixel(px, py, c) {
+		if (px < 0 || px >= pw || py < 0 || py >= ph) return;
+		const idx = (py * pw + px) * 4;
+		pixels[idx] = c[0];
+		pixels[idx + 1] = c[1];
+		pixels[idx + 2] = c[2];
+		pixels[idx + 3] = c[3];
+	}
+
+	let selection = [];
+	switch (d) {
+		case 1:
+			// north
+			for (let i = 0; i < w; i++) {
+				const p = getPixel(x + i, y);
+				if (p) selection.push(p);
+			}
+			for (let j = 0; j < h; j++) {
+				for (let s = 0; s < selection.length; s++) {
+					setPixel(x + s, y - j, selection[s]);
+				}
+			}
+			break;
+		case 2:
+			// east
+			for (let i = 0; i < h; i++) {
+				const p = getPixel(x, y + i);
+				if (p) selection.push(p);
+			}
+			for (let j = 0; j < w; j++) {
+				for (let s = 0; s < selection.length; s++) {
+					setPixel(x + j, y + s, selection[s]);
+				}
+			}
+			break;
+		case 3:
+			// south
+			for (let i = 0; i < w; i++) {
+				const p = getPixel(x + i, y);
+				if (p) selection.push(p);
+			}
+			for (let j = 0; j < h; j++) {
+				for (let s = 0; s < selection.length; s++) {
+					setPixel(x + s, y + j, selection[s]);
+				}
+			}
+			break;
+		case 4:
+			// west
+			for (let i = 0; i < h; i++) {
+				const p = getPixel(x, y + i);
+				if (p) selection.push(p);
+			}
+			for (let j = 0; j < w; j++) {
+				for (let s = 0; s < selection.length; s++) {
+					setPixel(x - j, y + s, selection[s]);
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	source.updatePixels();
+}
+
 function draw() {
 	if (!pallet) return;
-	background(config.bgColor || '#111');
-	pg.background(config.bgColor || '#111');
+	background(config.bgColor || "#111");
+	pg.background(config.bgColor || "#111");
 	pg.noStroke();
 	let newpallet = [...pallet];
 	let cc = 0;
@@ -171,7 +260,7 @@ function draw() {
 		let fc = newpallet[cc % newpallet.length];
 		let nc = newpallet[(cc + 1) % newpallet.length];
 
-		if (cell.dir === 'v') {
+		if (cell.dir === "v") {
 			for (let g = 0; g < cell.h; g++) {
 				let inter = g / cell.h;
 				pg.fill(chroma.mix(fc, nc, inter, cell.mode).hex());
@@ -197,6 +286,17 @@ function draw() {
 			cc = -1; // cc++ below will make it 0, so next cell starts at newpallet[0]
 		}
 		cc++;
+	}
+	// Smear effect, take portions of pg and draw them repeatedly to appear to stretch the pixels
+	for (let i = 0; i < config.smears; i++) {
+		smear(
+			pg,
+			randomInt(R, 0, config.width * 2),
+			randomInt(R, 0, config.height * 2),
+			randomInt(R, 0, config.width * 2),
+			randomInt(R, 0, config.height * 2),
+			randomInt(R, 1, 4),
+		);
 	}
 
 	image(pg, 0, 0, width, height);
