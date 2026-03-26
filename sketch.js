@@ -111,6 +111,7 @@ function setup() {
 			config.vigStrength = 0.3 + R() * 0.6; // 0.3–0.9
 			config.grainAmt = 4 + R() * 14; // 4–18 per channel
 			config.grainSeed = Math.round(R() * 0xffffffff);
+			config.chromaShift = floor(1 + R() * 7); // 1–7 px channel split
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
@@ -167,11 +168,19 @@ function setup() {
 						? "Focused"
 						: "Dramatic";
 
+			const clarity =
+				config.chromaShift <= 2
+					? "Sharp"
+					: config.chromaShift <= 4
+						? "Soft"
+						: "Dreamy";
+
 			$fx.features({
 				Pallet: "Pallet " + config.pallet,
 				Density: density,
 				Flow: flow,
 				Vibe: vibe,
+				Clarity: clarity,
 			});
 			console.log(
 				"seed:",
@@ -311,6 +320,42 @@ function applyPostProcess(source, bgHex, vigStrength, grainAmt, grainSeed) {
 }
 
 /**
+ * Applies horizontal chromatic aberration to a graphics buffer.
+ * Shifts the red channel left by `shift` pixels and the blue channel right
+ * by `shift` pixels; green stays in place as the anchor.
+ * Reads from a frozen copy of the pixel array so no channel bleeds into another.
+ * @param {p5.Graphics} source
+ * @param {number} shift - integer pixel offset (1–7 typical)
+ */
+function applyChromatic(source, shift) {
+	source.loadPixels();
+	const w = source.width,
+		h = source.height;
+	const src = new Uint8ClampedArray(source.pixels); // frozen snapshot
+	const pix = source.pixels;
+	const s = Math.round(shift);
+
+	for (let y = 0; y < h; y++) {
+		const row = y * w;
+		for (let x = 0; x < w; x++) {
+			const idx = (row + x) << 2;
+
+			// Red: pull from x - s
+			const rx = x - s;
+			pix[idx] = rx >= 0 ? src[(row + rx) << 2] : src[idx];
+
+			// Green: unchanged
+			pix[idx + 1] = src[idx + 1];
+
+			// Blue: pull from x + s
+			const bx = x + s;
+			pix[idx + 2] = bx < w ? src[((row + bx) << 2) + 2] : src[idx + 2];
+		}
+	}
+	source.updatePixels();
+}
+
+/**
  * Draws a single square wave across one row of the cell grid.
  * Picks a row to start from using Perlin noise, then walks its cells
  * left-to-right, stair-stepping between top and bottom edges at each
@@ -427,6 +472,7 @@ function draw() {
 		}
 		cc++;
 	}
+
 	// Smear effect, take portions of pg and draw them repeatedly to appear to stretch the pixels
 	for (let i = 0; i < config.smears; i++) {
 		smear(
@@ -452,6 +498,9 @@ function draw() {
 		config.grainAmt,
 		config.grainSeed,
 	);
+
+	// Chromatic aberration — RGB channel split
+	applyChromatic(pg, config.chromaShift);
 
 	image(pg, 0, 0, width, height);
 
