@@ -73,7 +73,7 @@ For each field zone:
 2. Call `applyCells(graphics, fieldSubPalette, fieldCells)` with the field's sub-palette.
 3. Call a **zone-bounded smear** at the field's top and bottom edges: 2–4 passes with x drawn from `[zone.x, zone.x + zone.width]`, y constrained to within ~10% of the field's top or bottom edge. Use `d=2` (east) or `d=4` (west) only — no north/south smears in Rothko mode. This requires passing zone bounds to constrain smear coordinates — see implementation note below.
 
-**Implementation note for smear:** The existing `applySmear` uses `config.width` and `config.height` to draw smear coordinates across the full canvas. For Rothko mode, smear must be scoped to the field zone. Either: (a) call `drawSmear` directly with coordinates computed within the zone, or (b) add a `bounds` parameter to `applySmear`. Option (a) is simpler.
+**Implementation note for smear:** Call `drawSmear` directly with coordinates computed within the zone — do not use `applySmear` (which uses `config.width`/`config.height` and would scatter smears across the full canvas). Compute x, y, w, h values from the zone bounds explicitly before each `drawSmear` call.
 
 ### Step 5 — Shared post-processing (called once on full buffer after all fields)
 In this order:
