@@ -119,6 +119,8 @@ function setup() {
 			config.grainSeed = Math.round(R() * 0xffffffff);
 			config.chromaShift = floor(1 + R() * 4); // 1–4 px channel split
 			config.hazeStrength = 0.12 + R() * 0.3; // 0.12–0.42 atmospheric fade
+			config.lightLeakCount = randomInt(R, 2, 6);
+			config.lightLeakSeed = Math.round(R() * 0xffffffff);
 			config.captureCells = randomInt(R, 5, 10);
 			config.pixelationLevels = [
 				randomInt(R, 2, 4),
@@ -406,6 +408,67 @@ function applyChromatic(source, shift) {
 }
 
 /**
+ * Draws semi-transparent color bars bleeding in from the canvas edges,
+ * simulating film light leaks. Each leak is a gradient that peaks at the
+ * edge and fades to transparent inward. Uses bright palette colors and a
+ * sub-RNG so positions are deterministic without consuming the main R() stream.
+ * @param {p5.Graphics} graphics
+ * @param {string[]} pal - Palette sorted darkest→lightest.
+ * @param {number} count - Number of leaks to draw.
+ * @param {Function} rng - Seeded sub-RNG (use createRng(config.lightLeakSeed)).
+ */
+function applyLightLeaks(graphics, pal, count, rng) {
+	const w = graphics.width,
+		h = graphics.height;
+	const ctx = graphics.drawingContext;
+
+	for (let i = 0; i < count; i++) {
+		// Bias toward brighter palette entries (upper half, sorted dark→light)
+		const ci = Math.min(
+			Math.floor(pal.length * 0.5 + rng() * pal.length * 0.5),
+			pal.length - 1,
+		);
+		const [r, g, b] = chroma(pal[ci]).brighten(0.4).rgb();
+		const peakAlpha = 0.1 + rng() * 0.25; // 10–35 % at the hard edge
+
+		const isVertical = rng() < 0.6; // vertical bars more common than horizontal
+
+		if (isVertical) {
+			const onLeft = rng() < 0.5;
+			const barW = w * (0.05 + rng() * 0.14); // 5–19 % of width
+			const yStart = rng() * h * 0.4;
+			const barH = h * (0.3 + rng() * 0.7);
+			// Gradient runs from the hard edge inward to transparent
+			const grad = ctx.createLinearGradient(
+				onLeft ? 0 : w,
+				0,
+				onLeft ? barW : w - barW,
+				0,
+			);
+			grad.addColorStop(0, `rgba(${r},${g},${b},${peakAlpha})`);
+			grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+			ctx.fillStyle = grad;
+			ctx.fillRect(onLeft ? 0 : w - barW, yStart, barW, barH);
+		} else {
+			const onTop = rng() < 0.5;
+			const barH = h * (0.04 + rng() * 0.12); // 4–16 % of height
+			const xStart = rng() * w * 0.4;
+			const barW = w * (0.4 + rng() * 0.6);
+			const grad = ctx.createLinearGradient(
+				0,
+				onTop ? 0 : h,
+				0,
+				onTop ? barH : h - barH,
+			);
+			grad.addColorStop(0, `rgba(${r},${g},${b},${peakAlpha})`);
+			grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+			ctx.fillStyle = grad;
+			ctx.fillRect(xStart, onTop ? 0 : h - barH, barW, barH);
+		}
+	}
+}
+
+/**
  * Draws a single square wave across one row of the cell grid.
  * Picks a row to start from using Perlin noise, then walks its cells
  * left-to-right, stair-stepping between top and bottom edges at each
@@ -615,6 +678,9 @@ function draw() {
 			randomInt(R, ...config.pixelationLevels),
 		);
 	}
+	// Light leaks — soft color bars bleeding in from canvas edges
+	applyLightLeaks(pg, pallet, config.lightLeakCount, createRng(config.lightLeakSeed));
+
 	// Vignette + film grain in a single pixel pass
 	applyPostProcess(
 		pg,
