@@ -110,7 +110,8 @@ function setup() {
 			config.bgColor = pallet[0]; // darkest palette color
 			config.smears = randomInt(R, 2, 6);
 			config.squareWaves = randomInt(R, 2, 4);
-			config.vigStrength = 0.45 + R() * 0.45; // 0.45–0.9
+			//config.vigStrength = 0.45 + R() * 0.45; // 0.45–0.9
+			config.vigStrength = 0; // 0.45–0.9
 			config.grainAmt = 8 + R() * 14; // 8–22 per channel
 			config.grainSeed = Math.round(R() * 0xffffffff);
 			config.chromaShift = floor(1 + R() * 4); // 1–4 px channel split
