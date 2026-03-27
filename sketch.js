@@ -85,11 +85,11 @@ function suggestColor(pal) {
 
 function canvasSize() {
 	const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
-	return { w: Math.floor(1920 * scale), h: Math.floor(1080 * scale) };
+	return {w: Math.floor(1920 * scale), h: Math.floor(1080 * scale)};
 }
 
 function setup() {
-	const { w, h } = canvasSize();
+	const {w, h} = canvasSize();
 	createCanvas(w, h);
 	config.width = fullWidth;
 	config.height = fullHeight;
@@ -122,7 +122,7 @@ function setup() {
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
-			const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
+			const rawH = Array.from({length: config.rows}, () => 0.3 + R() * 1.7);
 			const totalRaw = rawH.reduce((a, b) => a + b, 0);
 			const rowHeights = rawH.map((h) =>
 				Math.max(3, Math.round((h / totalRaw) * pg.height)),
@@ -207,7 +207,7 @@ function setup() {
 		});
 }
 
-function smear(source, x, y, w = 100, h = 100, d = 2) {
+function drawSmear(source, x, y, w = 100, h = 100, d = 2) {
 	source.loadPixels();
 	const pw = source.width;
 	const ph = source.height;
@@ -483,11 +483,7 @@ function drawSquareWave(graphics, cellList, pal, waveIndex = 0) {
 	}
 }
 
-function draw() {
-	if (!pallet) return;
-	background(config.bgColor || "#111");
-	pg.background(config.bgColor || "#111");
-	pg.noStroke();
+function applyCells(graphics, pallet, cells) {
 	let newPallet = [...pallet];
 	let cc = 0;
 	for (let i = 0; i < cells.length; i++) {
@@ -495,7 +491,7 @@ function draw() {
 
 		// Bias palette index by vertical position: top → lighter, bottom → darker.
 		// pallet is sorted dark[0] → light[last], so invert yNorm.
-		const yNorm = cell.y / pg.height;
+		const yNorm = cell.y / graphics.height;
 		const yBias = floor((1 - yNorm) * newPallet.length * 0.75);
 		const biasedCc = (cc + yBias) % newPallet.length;
 
@@ -505,14 +501,14 @@ function draw() {
 		if (cell.dir === "v") {
 			for (let g = 0; g < cell.h; g++) {
 				let inter = g / cell.h;
-				pg.fill(chroma.mix(fc, nc, inter, cell.mode).hex());
-				pg.rect(cell.x, cell.y + g, cell.w, 1);
+				graphics.fill(chroma.mix(fc, nc, inter, cell.mode).hex());
+				graphics.rect(cell.x, cell.y + g, cell.w, 1);
 			}
 		} else {
 			for (let g = 0; g < cell.w; g++) {
 				let inter = g / cell.w;
-				pg.fill(chroma.mix(fc, nc, inter, cell.mode).hex());
-				pg.rect(cell.x + g, cell.y, 1, cell.h);
+				graphics.fill(chroma.mix(fc, nc, inter, cell.mode).hex());
+				graphics.rect(cell.x + g, cell.y, 1, cell.h);
 			}
 		}
 
@@ -525,12 +521,10 @@ function draw() {
 		}
 		cc++;
 	}
+}
 
-	// Atmospheric haze — sky wash on the upper portion
-	applyAtmosphere(pg, pallet, config.hazeStrength);
-
-	// Smear effect — biased horizontal in upper half (clouds), random in lower half (terrain)
-	for (let i = 0; i < config.smears; i++) {
+function applySmear(graphics, smears) {
+	for (let i = 0; i < smears; i++) {
 		const sx = randomInt(R, 0, config.width);
 		const sy = randomInt(R, 0, config.height);
 		const sw = randomInt(R, 20, config.width * 0.6);
@@ -541,13 +535,34 @@ function draw() {
 			sy < config.height * 0.5 && (baseDir === 1 || baseDir === 3)
 				? baseDir + 1
 				: baseDir;
-		smear(pg, sx, sy, sw, sh, sd);
+		drawSmear(graphics, sx, sy, sw, sh, sd);
 	}
+}
 
+function applySquareWave(graphics, cells, pallet, waves) {
 	// square wave
-	for (let i = 0; i < config.squareWaves; i++) {
-		drawSquareWave(pg, cells, pallet, i);
+	for (let i = 0; i < waves; i++) {
+		drawSquareWave(graphics, cells, pallet, i);
 	}
+}
+
+function draw() {
+	if (!pallet) return;
+	background(config.bgColor || "#111");
+	pg.background(config.bgColor || "#111");
+	pg.noStroke();
+
+	// Core cell structure with gradient fills
+	applyCells(pg, pallet, cells);
+
+	// Atmospheric haze — sky wash on the upper portion
+	applyAtmosphere(pg, pallet, config.hazeStrength);
+
+	// Smear effect — biased horizontal in upper half (clouds), random in lower half (terrain)
+	applySmear(pg, config.smears);
+
+	// Square wave effect
+	applySquareWave(pg, cells, pallet, config.squareWaves);
 
 	// Vignette + film grain in a single pixel pass
 	applyPostProcess(
@@ -575,7 +590,7 @@ function keyPressed() {
 }
 
 function windowResized() {
-	const { w, h } = canvasSize();
+	const {w, h} = canvasSize();
 	resizeCanvas(w, h);
 	redraw();
 }
