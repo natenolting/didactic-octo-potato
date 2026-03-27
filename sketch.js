@@ -104,17 +104,17 @@ function setup() {
 			pallet.push(suggestColor(pallet));
 			pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
 
-			config.cols = randomInt(R, 10, 55);
-			config.rows = randomInt(R, 6, 40);
+			config.cols = randomInt(R, 6, 22);
+			config.rows = randomInt(R, 5, 14);
 			config.cellwidth = pg.width / config.cols;
 			config.bgColor = pallet[0]; // darkest palette color
-			config.smears = randomInt(R, 4, 12);
+			config.smears = randomInt(R, 2, 6);
 			config.squareWaves = randomInt(R, 2, 4);
-			config.vigStrength = 0.3 + R() * 0.6; // 0.3–0.9
-			config.grainAmt = 4 + R() * 14; // 4–18 per channel
+			config.vigStrength = 0.45 + R() * 0.45; // 0.45–0.9
+			config.grainAmt = 8 + R() * 14; // 8–22 per channel
 			config.grainSeed = Math.round(R() * 0xffffffff);
-			config.chromaShift = floor(1 + R() * 7); // 1–7 px channel split
-			config.hazeStrength = 0.08 + R() * 0.25; // 0.08–0.33 atmospheric fade
+			config.chromaShift = floor(1 + R() * 4); // 1–4 px channel split
+			config.hazeStrength = 0.12 + R() * 0.3; // 0.12–0.42 atmospheric fade
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
@@ -137,19 +137,26 @@ function setup() {
 				const cellH = Math.max(2, rowHeights[y] - GAP);
 				const brickOffset = y % 2 === 1 ? config.cellwidth * 0.5 : 0;
 				// Bias gradient direction: horizontal at top (sky), more vertical lower (terrain)
-			const rowNorm = y / config.rows;
-			const hProb = rowNorm < 0.4 ? 0.85 : rowNorm < 0.7 ? 0.6 : 0.35;
-			const dir = R() < hProb ? "h" : "v";
+				const rowNorm = y / config.rows;
+				const hProb = rowNorm < 0.4 ? 0.85 : rowNorm < 0.7 ? 0.6 : 0.35;
+				const dir = R() < hProb ? "h" : "v";
 				const mode = MODES[randomInt(R, 0, MODES.length - 1)];
 				dir === "h" ? hCount++ : vCount++;
 
-				// Odd rows get one extra cell so the brick offset doesn't gap on the right
-				const numCols = y % 2 === 1 ? config.cols + 1 : config.cols;
+				// Rest zones: sky and ground rows can use fewer, wider cells for breathing room
+				const isRestZone =
+					(rowNorm < 0.45 && R() < 0.4) || (rowNorm > 0.75 && R() < 0.3);
+				const restDivisor = isRestZone ? randomInt(R, 2, 4) : 1;
+				const rowCols = Math.max(2, Math.floor(config.cols / restDivisor));
+				const rowCellW = pg.width / rowCols;
+				const rowOffset = y % 2 === 1 ? rowCellW * 0.5 : 0;
+				const numCols = y % 2 === 1 ? rowCols + 1 : rowCols;
+
 				for (let x = 0; x < numCols; x++) {
 					cells.push({
-						x: x * config.cellwidth - brickOffset,
+						x: x * rowCellW - rowOffset,
 						y: yPos,
-						w: config.cellwidth,
+						w: rowCellW,
 						h: cellH,
 						dir,
 						mode,
@@ -162,22 +169,22 @@ function setup() {
 
 			const totalCells = config.cols * config.rows;
 			const density =
-				totalCells < 120 ? "Sparse" : totalCells < 500 ? "Medium" : "Dense";
+				totalCells < 60 ? "Sparse" : totalCells < 160 ? "Medium" : "Dense";
 			const flowRatio = hCount / config.rows;
 			const flow =
 				flowRatio > 0.7 ? "Horizontal" : flowRatio < 0.3 ? "Vertical" : "Mixed";
 
 			const vibe =
-				config.vigStrength < 0.35
+				config.vigStrength < 0.55
 					? "Open"
-					: config.vigStrength < 0.55
+					: config.vigStrength < 0.72
 						? "Focused"
 						: "Dramatic";
 
 			const clarity =
-				config.chromaShift <= 2
+				config.chromaShift <= 1
 					? "Sharp"
-					: config.chromaShift <= 4
+					: config.chromaShift <= 3
 						? "Soft"
 						: "Dreamy";
 
@@ -488,7 +495,7 @@ function draw() {
 		// Bias palette index by vertical position: top → lighter, bottom → darker.
 		// pallet is sorted dark[0] → light[last], so invert yNorm.
 		const yNorm = cell.y / pg.height;
-		const yBias = floor((1 - yNorm) * newpallet.length * 0.5);
+		const yBias = floor((1 - yNorm) * newpallet.length * 0.75);
 		const biasedCc = (cc + yBias) % newpallet.length;
 
 		let fc = newpallet[biasedCc % newpallet.length];
@@ -509,15 +516,11 @@ function draw() {
 		}
 
 		if (i % newpallet.length === newpallet.length - 1) {
-			// nc is the color this cell's gradient ends at (wraps to newpallet[0]).
-			// Reshuffle, then rotate so that same color is first — next cell's fc
-			// will equal this cell's nc, giving a seamless transition.
-			const endColor = nc;
-			newpallet = [...newpallet].sort(() => R() - 0.5);
-			const idx = newpallet.indexOf(endColor);
-			if (idx > 0)
-				newpallet = [...newpallet.slice(idx), ...newpallet.slice(0, idx)];
-			cc = -1; // cc++ below will make it 0, so next cell starts at newpallet[0]
+			// Consume the same RNG calls for compatibility, then re-sort by luminance
+			// so the vertical position bias always indexes light→dark correctly.
+			[...newpallet].sort(() => R() - 0.5);
+			newpallet = [...pallet]; // reset to luminance-sorted original
+			cc = -1;
 		}
 		cc++;
 	}
@@ -527,10 +530,10 @@ function draw() {
 
 	// Smear effect — biased horizontal in upper half (clouds), random in lower half (terrain)
 	for (let i = 0; i < config.smears; i++) {
-		const sx = randomInt(R, 0, config.width * 2);
-		const sy = randomInt(R, 0, config.height * 2);
-		const sw = randomInt(R, 0, config.width * 2);
-		const sh = randomInt(R, 0, config.height * 2);
+		const sx = randomInt(R, 0, config.width);
+		const sy = randomInt(R, 0, config.height);
+		const sw = randomInt(R, 20, config.width * 0.6);
+		const sh = randomInt(R, 10, config.height * 0.3);
 		const baseDir = randomInt(R, 1, 4);
 		// In the upper half, remap vertical dirs (1=N,3=S) to horizontal (2=E,4=W)
 		const sd =
