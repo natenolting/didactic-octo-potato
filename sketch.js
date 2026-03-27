@@ -92,6 +92,8 @@ function setup() {
 	config.height = 1080;
 	pg = createGraphics(config.width, config.height);
 	noLoop();
+	// Seed p5's Perlin noise so outputs are deterministic for a given token/seed.
+	noiseSeed(Math.round(R() * 0xffffffff));
 	fetch("1000.json")
 		.then((res) => res.json())
 		.then((data) => {
@@ -112,6 +114,7 @@ function setup() {
 			config.grainAmt = 4 + R() * 14; // 4–18 per channel
 			config.grainSeed = Math.round(R() * 0xffffffff);
 			config.chromaShift = floor(1 + R() * 7); // 1–7 px channel split
+			config.hazeStrength = 0.08 + R() * 0.25; // 0.08–0.33 atmospheric fade
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
@@ -133,7 +136,10 @@ function setup() {
 			for (let y = 0; y < config.rows; y++) {
 				const cellH = Math.max(2, rowHeights[y] - GAP);
 				const brickOffset = y % 2 === 1 ? config.cellwidth * 0.5 : 0;
-				const dir = R() < 0.6 ? "h" : "v";
+				// Bias gradient direction: horizontal at top (sky), more vertical lower (terrain)
+			const rowNorm = y / config.rows;
+			const hProb = rowNorm < 0.4 ? 0.85 : rowNorm < 0.7 ? 0.6 : 0.35;
+			const dir = R() < hProb ? "h" : "v";
 				const mode = MODES[randomInt(R, 0, MODES.length - 1)];
 				dir === "h" ? hCount++ : vCount++;
 
@@ -162,9 +168,9 @@ function setup() {
 				flowRatio > 0.7 ? "Horizontal" : flowRatio < 0.3 ? "Vertical" : "Mixed";
 
 			const vibe =
-				config.vigStrength < 0.45
+				config.vigStrength < 0.35
 					? "Open"
-					: config.vigStrength < 0.65
+					: config.vigStrength < 0.55
 						? "Focused"
 						: "Dramatic";
 
@@ -268,6 +274,37 @@ function smear(source, x, y, w = 100, h = 100, d = 2) {
 			break;
 	}
 
+	source.updatePixels();
+}
+
+/**
+ * Applies atmospheric haze — fades the top portion of the canvas toward
+ * the lightest palette colour, simulating aerial perspective / sky wash.
+ * @param {p5.Graphics} source
+ * @param {string[]} pal - Palette sorted darkest-to-lightest.
+ * @param {number} strength - 0–1, peak opacity of the haze at the top edge.
+ */
+function applyAtmosphere(source, pal, strength) {
+	source.loadPixels();
+	const w = source.width,
+		h = source.height;
+	const pix = source.pixels;
+	const [hr, hg, hb] = chroma(pal[pal.length - 1])
+		.desaturate(0.8)
+		.rgb();
+
+	for (let y = 0; y < h; y++) {
+		const yNorm = y / h;
+		// Haze strongest at top, fading to zero around 45% down
+		const haze = Math.max(0, 1 - yNorm / 0.45) * strength;
+		if (haze <= 0) break; // rows below 45% get nothing
+		for (let x = 0; x < w; x++) {
+			const idx = (y * w + x) << 2;
+			pix[idx] = (pix[idx] + (hr - pix[idx]) * haze) | 0;
+			pix[idx + 1] = (pix[idx + 1] + (hg - pix[idx + 1]) * haze) | 0;
+			pix[idx + 2] = (pix[idx + 2] + (hb - pix[idx + 2]) * haze) | 0;
+		}
+	}
 	source.updatePixels();
 }
 
@@ -380,8 +417,9 @@ function drawSquareWave(graphics, cellList, pal, waveIndex = 0) {
 		.sort(([a], [b]) => a - b)
 		.map(([, rowCells]) => rowCells.sort((a, b) => a.x - b.x));
 
-	// Pick starting row using noise offset by waveIndex.
-	const ri = floor(noise(42 + wo, 7 + wo) * sortedRows.length);
+	// Pick starting row — biased toward the vertical center for horizon effect.
+	const rawRi = noise(42 + wo, 7 + wo);
+	const ri = floor((0.25 + rawRi * 0.5) * sortedRows.length);
 	const rowCells = sortedRows[ri]; // x-column structure comes from this row
 	if (!rowCells || rowCells.length === 0) return;
 
@@ -401,14 +439,18 @@ function drawSquareWave(graphics, cellList, pal, waveIndex = 0) {
 	for (let ci = 0; ci < rowCells.length; ci++) {
 		const cell = rowCells[ci];
 
-		// Use the native canvas gradient — one fillRect, no strips, no gaps.
-		const grad = ctx.createLinearGradient(0, curY, 0, gh);
-		grad.addColorStop(0, `rgba(${fr},${fg},${fb},1)`);
-		grad.addColorStop(0.25, `rgba(${fr},${fg},${fb},.75)`);
-		grad.addColorStop(0.5, `rgba(${fr},${fg},${fb},.25)`);
+		// Solid stroke at the wave edge
+		ctx.fillStyle = `rgba(${fr},${fg},${fb},1)`;
+		ctx.fillRect(cell.x, curY, cell.w, cell.h);
+
+		// Short, soft gradient below the stroke
+		const reach = Math.min(gh * 0.3, gh - curY); // fade over 30% of canvas max
+		const grad = ctx.createLinearGradient(0, curY, 0, curY + reach);
+		grad.addColorStop(0, `rgba(${fr},${fg},${fb},.55)`);
+		grad.addColorStop(0.4, `rgba(${fr},${fg},${fb},.2)`);
 		grad.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
 		ctx.fillStyle = grad;
-		ctx.fillRect(cell.x, curY, cell.w, gh - curY);
+		ctx.fillRect(cell.x, curY + 2, cell.w, reach);
 
 		if (ci < rowCells.length - 1) {
 			// At the junction, noise decides: continue / jump to row above / jump to row below.
@@ -442,8 +484,15 @@ function draw() {
 	let cc = 0;
 	for (let i = 0; i < cells.length; i++) {
 		let cell = cells[i];
-		let fc = newpallet[cc % newpallet.length];
-		let nc = newpallet[(cc + 1) % newpallet.length];
+
+		// Bias palette index by vertical position: top → lighter, bottom → darker.
+		// pallet is sorted dark[0] → light[last], so invert yNorm.
+		const yNorm = cell.y / pg.height;
+		const yBias = floor((1 - yNorm) * newpallet.length * 0.5);
+		const biasedCc = (cc + yBias) % newpallet.length;
+
+		let fc = newpallet[biasedCc % newpallet.length];
+		let nc = newpallet[(biasedCc + 1) % newpallet.length];
 
 		if (cell.dir === "v") {
 			for (let g = 0; g < cell.h; g++) {
@@ -473,16 +522,22 @@ function draw() {
 		cc++;
 	}
 
-	// Smear effect, take portions of pg and draw them repeatedly to appear to stretch the pixels
+	// Atmospheric haze — sky wash on the upper portion
+	applyAtmosphere(pg, pallet, config.hazeStrength);
+
+	// Smear effect — biased horizontal in upper half (clouds), random in lower half (terrain)
 	for (let i = 0; i < config.smears; i++) {
-		smear(
-			pg,
-			randomInt(R, 0, config.width * 2),
-			randomInt(R, 0, config.height * 2),
-			randomInt(R, 0, config.width * 2),
-			randomInt(R, 0, config.height * 2),
-			randomInt(R, 1, 4),
-		);
+		const sx = randomInt(R, 0, config.width * 2);
+		const sy = randomInt(R, 0, config.height * 2);
+		const sw = randomInt(R, 0, config.width * 2);
+		const sh = randomInt(R, 0, config.height * 2);
+		const baseDir = randomInt(R, 1, 4);
+		// In the upper half, remap vertical dirs (1=N,3=S) to horizontal (2=E,4=W)
+		const sd =
+			sy < config.height * 0.5 && (baseDir === 1 || baseDir === 3)
+				? baseDir + 1
+				: baseDir;
+		smear(pg, sx, sy, sw, sh, sd);
 	}
 
 	// square wave
