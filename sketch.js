@@ -646,32 +646,33 @@ function drawPixelation(graphics, source, x, y, level) {
 	}
 }
 
-function draw() {
-	if (!pallet) return;
-	background(config.bgColor || "#111");
-	pg.background(config.bgColor || "#111");
-	pg.noStroke();
+// initate the scene by applying all effects in order
+function initScene(graphics, config, pallet, cells) {
+	graphics.background(config.bgColor || "#111");
+	graphics.noStroke();
 
 	// Core cell structure with gradient fills
-	applyCells(pg, pallet, cells);
+	applyCells(graphics, pallet, cells);
 
 	// capture cells for later
-	const newCells = shuffle([...cells]).sort((a, b) => (b.w * b.h) - (a.w * a.h)).slice(0, config.captureCells);
-	const capture = captureCells(pg, newCells);
+	const newCells = shuffle([...cells])
+		.sort((a, b) => b.w * b.h - a.w * a.h)
+		.slice(0, config.captureCells);
+	const capture = captureCells(graphics, newCells);
 
 	// Atmospheric haze — sky wash on the upper portion
-	applyAtmosphere(pg, pallet, config.hazeStrength);
+	applyAtmosphere(graphics, pallet, config.hazeStrength);
 
 	// Smear effect — biased horizontal in upper half (clouds), random in lower half (terrain)
-	applySmear(pg, config.smears);
+	applySmear(graphics, config.smears);
 
 	// Square wave effect
-	applySquareWave(pg, cells, pallet, config.squareWaves);
+	applySquareWave(graphics, cells, pallet, config.squareWaves);
 
 	//use the captured cells
 	for (let i = 0; i < capture.length; i++) {
 		drawPixelation(
-			pg,
+			graphics,
 			capture[i],
 			newCells[i].x,
 			newCells[i].y,
@@ -679,11 +680,16 @@ function draw() {
 		);
 	}
 	// Light leaks — soft color bars bleeding in from canvas edges
-	applyLightLeaks(pg, pallet, config.lightLeakCount, createRng(config.lightLeakSeed));
+	applyLightLeaks(
+		graphics,
+		pallet,
+		config.lightLeakCount,
+		createRng(config.lightLeakSeed),
+	);
 
 	// Vignette + film grain in a single pixel pass
 	applyPostProcess(
-		pg,
+		graphics,
 		config.bgColor || "#111",
 		config.vigStrength,
 		config.grainAmt,
@@ -691,8 +697,14 @@ function draw() {
 	);
 
 	// Chromatic aberration — RGB channel split
-	applyChromatic(pg, config.chromaShift);
+	applyChromatic(graphics, config.chromaShift);
+}
 
+function draw() {
+	if (!pallet) return;
+	background(config.bgColor || "#111");
+
+	initScene(pg, config, pallet, cells);
 	image(pg, 0, 0, width, height);
 
 	$fx.preview();
