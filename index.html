@@ -10,6 +10,14 @@
       body { display: flex; justify-content: center; align-items: center; }
       canvas { display: block; }
     </style>
+    <!-- Patch canvas context creation so getImageData-heavy operations don't warn -->
+    <script>
+      const _getContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+        if (type === "2d") attrs = { ...attrs, willReadFrequently: true };
+        return _getContext.call(this, type, attrs);
+      };
+    </script>
     <!-- Load $fx SDK FIRST, before anything else -->
     <script src="fxhash.min.js"></script>
     <script src="chroma.min.js"></script>
