@@ -1,5 +1,5 @@
 let pallets = [];
-let pallet, cols, rows, cellwidth, cellheight;
+let pallet, cols, rows;
 let cells = [];
 let pg;
 
@@ -37,7 +37,7 @@ function randomRange(rng, minValue, maxValue) {
 }
 
 function randomInt(rng, minValue, maxValue) {
-	return floor(randomRange(rng, minValue, maxValue + 1));
+	return Math.floor(randomRange(rng, minValue, maxValue + 1));
 }
 
 const config = {};
@@ -82,11 +82,11 @@ function suggestColor(pal) {
 
 function canvasSize() {
 	const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
-	return { w: Math.floor(1920 * scale), h: Math.floor(1080 * scale) };
+	return {w: Math.floor(1920 * scale), h: Math.floor(1080 * scale)};
 }
 
 function setup() {
-	const { w, h } = canvasSize();
+	const {w, h} = canvasSize();
 	createCanvas(w, h);
 	config.width = 1920;
 	config.height = 1080;
@@ -119,7 +119,7 @@ function setup() {
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
-			const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
+			const rawH = Array.from({length: config.rows}, () => 0.3 + R() * 1.7);
 			const totalRaw = rawH.reduce((a, b) => a + b, 0);
 			const rowHeights = rawH.map((h) =>
 				Math.max(3, Math.round((h / totalRaw) * pg.height)),
@@ -136,7 +136,6 @@ function setup() {
 			let yPos = 0;
 			for (let y = 0; y < config.rows; y++) {
 				const cellH = Math.max(2, rowHeights[y] - GAP);
-				const brickOffset = y % 2 === 1 ? config.cellwidth * 0.5 : 0;
 				// Bias gradient direction: horizontal at top (sky), more vertical lower (terrain)
 				const rowNorm = y / config.rows;
 				const hProb = rowNorm < 0.4 ? 0.85 : rowNorm < 0.7 ? 0.6 : 0.35;
@@ -165,8 +164,6 @@ function setup() {
 				}
 				yPos += rowHeights[y];
 			}
-
-			console.log("cells:", cells);
 
 			const totalCells = config.cols * config.rows;
 			const density =
@@ -287,7 +284,7 @@ function smear(source, x, y, w = 100, h = 100, d = 2) {
 
 /**
  * Applies atmospheric haze — fades the top portion of the canvas toward
- * the lightest palette colour, simulating aerial perspective / sky wash.
+ * the lightest palette color, simulating aerial perspective / sky wash.
  * @param {p5.Graphics} source
  * @param {string[]} pal - Palette sorted darkest-to-lightest.
  * @param {number} strength - 0–1, peak opacity of the haze at the top edge.
@@ -408,7 +405,7 @@ function applyChromatic(source, shift) {
  * @param {p5.Graphics} graphics - Target graphics buffer.
  * @param {Array<{x:number,y:number,w:number,h:number}>} cellList - All cells.
  * @param {string[]} pal - Palette array sorted darkest-to-lightest.
- * @param {{cellwidth:number}} cfg - Config object.
+ * @param waveIndex - integer index of the wave (0,1,2...) to ensure different noise patterns if multiple waves are drawn
  */
 function drawSquareWave(graphics, cellList, pal, waveIndex = 0) {
 	const noiseScale = 0.28;
@@ -488,7 +485,7 @@ function draw() {
 	background(config.bgColor || "#111");
 	pg.background(config.bgColor || "#111");
 	pg.noStroke();
-	let newpallet = [...pallet];
+	let newPallet = [...pallet];
 	let cc = 0;
 	for (let i = 0; i < cells.length; i++) {
 		let cell = cells[i];
@@ -496,11 +493,11 @@ function draw() {
 		// Bias palette index by vertical position: top → lighter, bottom → darker.
 		// pallet is sorted dark[0] → light[last], so invert yNorm.
 		const yNorm = cell.y / pg.height;
-		const yBias = floor((1 - yNorm) * newpallet.length * 0.75);
-		const biasedCc = (cc + yBias) % newpallet.length;
+		const yBias = floor((1 - yNorm) * newPallet.length * 0.75);
+		const biasedCc = (cc + yBias) % newPallet.length;
 
-		let fc = newpallet[biasedCc % newpallet.length];
-		let nc = newpallet[(biasedCc + 1) % newpallet.length];
+		let fc = newPallet[biasedCc % newPallet.length];
+		let nc = newPallet[(biasedCc + 1) % newPallet.length];
 
 		if (cell.dir === "v") {
 			for (let g = 0; g < cell.h; g++) {
@@ -516,11 +513,11 @@ function draw() {
 			}
 		}
 
-		if (i % newpallet.length === newpallet.length - 1) {
+		if (i % newPallet.length === newPallet.length - 1) {
 			// Consume the same RNG calls for compatibility, then re-sort by luminance
 			// so the vertical position bias always indexes light→dark correctly.
-			[...newpallet].sort(() => R() - 0.5);
-			newpallet = [...pallet]; // reset to luminance-sorted original
+			[...newPallet].sort(() => R() - 0.5);
+			newPallet = [...pallet]; // reset to luminance-sorted original
 			cc = -1;
 		}
 		cc++;
@@ -568,7 +565,7 @@ function draw() {
 }
 
 function windowResized() {
-	const { w, h } = canvasSize();
+	const {w, h} = canvasSize();
 	resizeCanvas(w, h);
 	redraw();
 }
