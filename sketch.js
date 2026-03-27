@@ -2,6 +2,9 @@ let pallets = [];
 let pallet, cols, rows;
 let cells = [];
 let pg;
+// full size file, 4K
+const fullWidth = 3840;
+const fullHeight = 2160;
 
 // Reproducible RNG — use R() everywhere instead of $fx.rand() or random().
 // Prod (no ?seed param): delegates to $fx.rand(), seeded by the token hash.
@@ -82,14 +85,14 @@ function suggestColor(pal) {
 
 function canvasSize() {
 	const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
-	return {w: Math.floor(1920 * scale), h: Math.floor(1080 * scale)};
+	return { w: Math.floor(1920 * scale), h: Math.floor(1080 * scale) };
 }
 
 function setup() {
-	const {w, h} = canvasSize();
+	const { w, h } = canvasSize();
 	createCanvas(w, h);
-	config.width = 1920;
-	config.height = 1080;
+	config.width = fullWidth;
+	config.height = fullHeight;
 	pg = createGraphics(config.width, config.height);
 	noLoop();
 	// Seed p5's Perlin noise so outputs are deterministic for a given token/seed.
@@ -119,7 +122,7 @@ function setup() {
 
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
-			const rawH = Array.from({length: config.rows}, () => 0.3 + R() * 1.7);
+			const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
 			const totalRaw = rawH.reduce((a, b) => a + b, 0);
 			const rowHeights = rawH.map((h) =>
 				Math.max(3, Math.round((h / totalRaw) * pg.height)),
@@ -564,8 +567,15 @@ function draw() {
 	noLoop();
 }
 
+function keyPressed() {
+	if (key === "s" || key === "S") {
+		const hash = $fx.hash || "download";
+		save(pg, `${hash}.png`);
+	}
+}
+
 function windowResized() {
-	const {w, h} = canvasSize();
+	const { w, h } = canvasSize();
 	resizeCanvas(w, h);
 	redraw();
 }
