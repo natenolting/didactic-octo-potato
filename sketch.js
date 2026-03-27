@@ -85,11 +85,11 @@ function suggestColor(pal) {
 
 function canvasSize() {
 	const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
-	return {w: Math.floor(1920 * scale), h: Math.floor(1080 * scale)};
+	return { w: Math.floor(1920 * scale), h: Math.floor(1080 * scale) };
 }
 
 function setup() {
-	const {w, h} = canvasSize();
+	const { w, h } = canvasSize();
 	createCanvas(w, h);
 	config.width = fullWidth;
 	config.height = fullHeight;
@@ -119,10 +119,15 @@ function setup() {
 			config.grainSeed = Math.round(R() * 0xffffffff);
 			config.chromaShift = floor(1 + R() * 4); // 1–4 px channel split
 			config.hazeStrength = 0.12 + R() * 0.3; // 0.12–0.42 atmospheric fade
-
+			config.captureCells = randomInt(R, 5, 10);
+			config.pixelationLevels = [
+				randomInt(R, 2, 4),
+				randomInt(R, 5, 10),
+				randomInt(R, 12, 20),
+			];
 			// Variable row heights — random weights, normalized to fill pg.height exactly.
 			const GAP = 0; // px gap between rows (shows bgColor)
-			const rawH = Array.from({length: config.rows}, () => 0.3 + R() * 1.7);
+			const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
 			const totalRaw = rawH.reduce((a, b) => a + b, 0);
 			const rowHeights = rawH.map((h) =>
 				Math.max(3, Math.round((h / totalRaw) * pg.height)),
@@ -546,6 +551,38 @@ function applySquareWave(graphics, cells, pallet, waves) {
 	}
 }
 
+function captureCells(graphics, cells) {
+	let capture = [];
+	for (let i = 0; i < cells.length; i++) {
+		const cell = cells[i];
+		const img = graphics.get(cell.x, cell.y, cell.w, cell.h);
+		capture.push(img);
+	}
+	return capture;
+}
+
+function drawPixelation(graphics, source, x, y, level) {
+	const w = source.width;
+	const h = source.height;
+
+	let rectW = w / level;
+	let rectH = h / level;
+
+	for (let i = 0; i < w; i += rectW) {
+		for (let j = 0; j < h; j += rectH) {
+			const gp = source.get(i, j);
+			graphics.fill(gp);
+			graphics.noStroke();
+			graphics.rect(
+				x + i,
+				y + j,
+				Math.min(rectW, w - i),
+				Math.min(rectH, h - j),
+			);
+		}
+	}
+}
+
 function draw() {
 	if (!pallet) return;
 	background(config.bgColor || "#111");
@@ -554,6 +591,10 @@ function draw() {
 
 	// Core cell structure with gradient fills
 	applyCells(pg, pallet, cells);
+
+	// capture cells for later
+	const newCells = shuffle([...cells]).sort((a, b) => (b.w * b.h) - (a.w * a.h)).slice(0, config.captureCells);
+	const capture = captureCells(pg, newCells);
 
 	// Atmospheric haze — sky wash on the upper portion
 	applyAtmosphere(pg, pallet, config.hazeStrength);
@@ -564,6 +605,16 @@ function draw() {
 	// Square wave effect
 	applySquareWave(pg, cells, pallet, config.squareWaves);
 
+	//use the captured cells
+	for (let i = 0; i < capture.length; i++) {
+		drawPixelation(
+			pg,
+			capture[i],
+			newCells[i].x,
+			newCells[i].y,
+			randomInt(R, ...config.pixelationLevels),
+		);
+	}
 	// Vignette + film grain in a single pixel pass
 	applyPostProcess(
 		pg,
@@ -590,7 +641,7 @@ function keyPressed() {
 }
 
 function windowResized() {
-	const {w, h} = canvasSize();
+	const { w, h } = canvasSize();
 	resizeCanvas(w, h);
 	redraw();
 }
