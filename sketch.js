@@ -222,14 +222,6 @@ function setup() {
 				config.fieldMargin = Math.round(config.width * (0.02 + R() * 0.02)); // margin on all four canvas sides
 				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical";   // bands stacked top-bottom or left-right
 			}
-			// DEV ONLY — forces Rothko on so you can develop without hunting for a 4% seed.
-			// Remove this entire block before the final commit.
-			config.isRothko = true;
-			config.fieldCount = config.fieldCount || randomInt(R, 2, 3);
-			config.fieldGap = config.fieldGap || Math.round(config.height * 0.015);
-			config.fieldMargin = config.fieldMargin || Math.round(config.width * 0.03);
-			config.rothkoOrientation = config.rothkoOrientation || "horizontal";
-
 			config.captureCells = randomInt(R, 5, 10);
 			config.pixelationLevels = [
 				randomInt(R, 2, 4),
