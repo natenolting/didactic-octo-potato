@@ -775,20 +775,21 @@ function drawPixelation(graphics, source, x, y, level) {
 	const w = source.width;
 	const h = source.height;
 
-	let rectW = w / level;
-	let rectH = h / level;
-
-	for (let i = 0; i < w; i += rectW) {
-		for (let j = 0; j < h; j += rectH) {
-			const gp = source.get(i, j);
+	// Compute each rect's start and width from floor(index * span / level) so that
+	// adjacent rects share exact integer pixel boundaries — no float accumulation drift
+	// that would leave sub-pixel hairline gaps between tiles.
+	for (let ix = 0; ix < level; ix++) {
+		const px = Math.floor((ix * w) / level);
+		const pw = Math.floor(((ix + 1) * w) / level) - px;
+		if (pw <= 0) continue;
+		for (let iy = 0; iy < level; iy++) {
+			const py = Math.floor((iy * h) / level);
+			const ph = Math.floor(((iy + 1) * h) / level) - py;
+			if (ph <= 0) continue;
+			const gp = source.get(px, py);
 			graphics.fill(gp);
 			graphics.noStroke();
-			graphics.rect(
-				x + i,
-				y + j,
-				Math.min(rectW, w - i),
-				Math.min(rectH, h - j),
-			);
+			graphics.rect(x + px, y + py, pw, ph);
 		}
 	}
 }
