@@ -83,6 +83,97 @@ function suggestColor(pal) {
 	return chroma.lch(avgL, avgC, novelH).hex();
 }
 
+/**
+ * Splits the palette into `count` hue-distinct clusters so each Rothko
+ * field can be assigned its own color family.
+ *
+ * Approach: sort colors by LCH hue angle and divide evenly into groups.
+ * LCH hue gives perceptually uniform spacing — better than HSL for this.
+ *
+ * Fallback: if total hue spread is < 60° (near-neutral/greyscale palette),
+ * hue clustering would produce near-identical groups. In that case we fall
+ * back to luminance order (the palette is already sorted dark→light) so each
+ * field still gets visually distinct colors.
+ *
+ * @param {string[]} pal - Palette hex strings (any order accepted).
+ * @param {number} count - Number of clusters to produce (matches fieldCount).
+ * @returns {string[][]} Array of `count` sub-palettes, each an array of hex strings.
+ */
+function clusterByHue(pal, count) {
+	const withHue = pal.map((c) => ({ c, h: chroma(c).lch()[2] || 0 }));
+	const hues = withHue.map((x) => x.h);
+	const spread = Math.max(...hues) - Math.min(...hues);
+
+	// Low hue variance → fall back to luminance order (palette already sorted dark→light)
+	const sorted =
+		spread < 60
+			? [...pal]
+			: withHue.sort((a, b) => a.h - b.h).map((x) => x.c);
+
+	// Divide sorted colors evenly into count groups
+	const size = Math.ceil(sorted.length / count);
+	const clusters = Array.from({ length: count }, (_, i) =>
+		sorted.slice(i * size, (i + 1) * size),
+	);
+
+	// Guard: ensure no empty cluster (edge case with very small palettes)
+	return clusters.map((cl, i) =>
+		cl.length > 0 ? cl : [sorted[i % sorted.length]],
+	);
+}
+
+/**
+ * Computes the bounding rectangle for each Rothko color field.
+ *
+ * Layout logic:
+ * - fieldMargin is subtracted from all four canvas sides, so the background
+ *   color is always visible as a border around the entire composition.
+ * - Fields are separated by fieldGap strips (also shows background color).
+ * - Horizontal orientation: fields are stacked top-to-bottom, each spanning
+ *   the full usable width. Heights are randomly weighted.
+ * - Vertical orientation: fields are arranged left-to-right, each spanning
+ *   the full usable height. Widths are randomly weighted.
+ *
+ * @param {object} cfg - config with width, height, fieldCount, fieldGap,
+ *                       fieldMargin, rothkoOrientation.
+ * @returns {Array<{x:number, y:number, width:number, height:number}>}
+ */
+function buildRothkoZones(cfg) {
+	const isVertical = cfg.rothkoOrientation === "vertical";
+
+	// Canvas area available after removing margins on all four sides
+	const usableW = cfg.width - cfg.fieldMargin * 2;
+	const usableH = cfg.height - cfg.fieldMargin * 2;
+	// Total space consumed by the gaps between fields
+	const totalGap = cfg.fieldGap * (cfg.fieldCount - 1);
+
+	// Random weights give each field a different size — same pattern as normal row heights.
+	// The span being divided is height (horizontal layout) or width (vertical layout).
+	const rawSizes = Array.from({ length: cfg.fieldCount }, () => 0.6 + R() * 0.8);
+	const totalRaw = rawSizes.reduce((a, b) => a + b, 0);
+	const usableSpan = (isVertical ? usableW : usableH) - totalGap;
+	const sizes = rawSizes.map((s) =>
+		Math.max(10, Math.round((s / totalRaw) * usableSpan)),
+	);
+	// Correct any rounding drift so fields fill the span exactly
+	const drift = usableSpan - sizes.reduce((a, b) => a + b, 0);
+	sizes[sizes.length - 1] = Math.max(10, sizes[sizes.length - 1] + drift);
+
+	const zones = [];
+	let pos = cfg.fieldMargin; // cursor that advances across the stacking axis
+	for (let i = 0; i < cfg.fieldCount; i++) {
+		if (isVertical) {
+			// Vertical layout: advance left-to-right; height spans full usable height
+			zones.push({ x: pos, y: cfg.fieldMargin, width: sizes[i], height: usableH });
+		} else {
+			// Horizontal layout: advance top-to-bottom; width spans full usable width
+			zones.push({ x: cfg.fieldMargin, y: pos, width: usableW, height: sizes[i] });
+		}
+		pos += sizes[i] + cfg.fieldGap;
+	}
+	return zones;
+}
+
 function canvasSize() {
 	const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
 	return { w: Math.floor(1920 * scale), h: Math.floor(1080 * scale) };
@@ -121,6 +212,24 @@ function setup() {
 			config.hazeStrength = 0.12 + R() * 0.3; // 0.12–0.42 atmospheric fade
 			config.lightLeakCount = randomInt(R, 2, 6);
 			config.lightLeakSeed = Math.round(R() * 0xffffffff);
+
+			// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
+			// When active, draw() calls initRothkoScene() instead of initScene().
+			config.isRothko = R() < 0.04;
+			if (config.isRothko) {
+				config.fieldCount = randomInt(R, 2, 3);         // 2 or 3 color fields
+				config.fieldGap = Math.round(config.height * (0.01 + R() * 0.02));   // gap between fields (bgColor shows through)
+				config.fieldMargin = Math.round(config.width * (0.02 + R() * 0.02)); // margin on all four canvas sides
+				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical";   // bands stacked top-bottom or left-right
+			}
+			// DEV ONLY — forces Rothko on so you can develop without hunting for a 4% seed.
+			// Remove this entire block before the final commit.
+			config.isRothko = true;
+			config.fieldCount = config.fieldCount || randomInt(R, 2, 3);
+			config.fieldGap = config.fieldGap || Math.round(config.height * 0.015);
+			config.fieldMargin = config.fieldMargin || Math.round(config.width * 0.03);
+			config.rothkoOrientation = config.rothkoOrientation || "horizontal";
+
 			config.captureCells = randomInt(R, 5, 10);
 			config.pixelationLevels = [
 				randomInt(R, 2, 4),
@@ -202,6 +311,10 @@ function setup() {
 				Flow: flow,
 				Vibe: vibe,
 				Clarity: clarity,
+				// "Horizontal Fields" or "Vertical Fields" for Rothko tokens; "Mosaic" for everyone else.
+				Composition: config.isRothko
+					? (config.rothkoOrientation === "vertical" ? "Vertical Fields" : "Horizontal Fields")
+					: "Mosaic",
 			});
 			console.log(
 				"seed:",
@@ -700,11 +813,130 @@ function initScene(graphics, config, pallet, cells) {
 	applyChromatic(graphics, config.chromaShift);
 }
 
+/**
+ * Renders the Rothko Mode composition — 2–3 stacked color fields with
+ * gradient-cell texture and soft painterly edges.
+ *
+ * Called instead of initScene() when config.isRothko is true.
+ * Reuses applyCells, drawSmear, and the full post-processing stack.
+ *
+ * Pipeline per field:
+ *   1. Build a mini cell grid constrained to the field's zone bounds.
+ *   2. applyCells fills the zone with gradient-cell texture using the
+ *      field's hue-clustered sub-palette.
+ *   3. drawSmear (called directly, NOT applySmear) softens the field's
+ *      boundary edges. Smear direction is axis-dependent:
+ *        - Horizontal bands: north/south (d=1/3) blur top & bottom edges
+ *        - Vertical bands:   east/west  (d=2/4) blur left & right edges
+ *
+ * After all fields, the shared post-processing stack runs once on the
+ * full buffer (atmosphere, light leaks, grain, chromatic aberration).
+ *
+ * @param {p5.Graphics} graphics
+ * @param {object} cfg - config object (must have isRothko, fieldCount,
+ *                       fieldGap, fieldMargin, rothkoOrientation, and all
+ *                       standard post-processing keys)
+ * @param {string[]} pal - Palette sorted darkest→lightest
+ */
+function initRothkoScene(graphics, cfg, pal) {
+	graphics.background(cfg.bgColor || "#111");
+	graphics.noStroke();
+
+	const isVertical = cfg.rothkoOrientation === "vertical";
+	const zones = buildRothkoZones(cfg);          // bounding rect per field
+	const clusters = clusterByHue(pal, zones.length); // one sub-palette per field
+	const MODES = ["lab", "lch", "hsl"];
+
+	for (let zi = 0; zi < zones.length; zi++) {
+		const zone = zones[zi];
+		const fieldPal = clusters[zi]; // hue-distinct colors for this field
+
+		// --- Build mini cell grid constrained to zone bounds ---
+		const cols = randomInt(R, 6, 16);
+		const rows = randomInt(R, 3, 7);
+		const cellW = zone.width / cols;
+
+		// Variable row heights — same weighted normalization as normal mode
+		const rawH = Array.from({ length: rows }, () => 0.6 + R() * 0.8);
+		const totalRaw = rawH.reduce((a, b) => a + b, 0);
+		const rowHeights = rawH.map((h) =>
+			Math.max(2, Math.round((h / totalRaw) * zone.height)),
+		);
+		// Correct rounding drift so rows fill the zone height exactly
+		const hDrift = zone.height - rowHeights.reduce((a, b) => a + b, 0);
+		rowHeights[rowHeights.length - 1] = Math.max(
+			2,
+			rowHeights[rowHeights.length - 1] + hDrift,
+		);
+
+		const fieldCells = [];
+		let yPos = zone.y;
+		for (let row = 0; row < rows; row++) {
+			const cellH = rowHeights[row];
+			// Brick offset on odd rows (same as normal cell layout)
+			const offset = row % 2 === 1 ? cellW * 0.5 : 0;
+			const numCols = row % 2 === 1 ? cols + 1 : cols; // extra cell covers brick gap
+			const dir = R() < 0.5 ? "h" : "v"; // horizontal or vertical gradient direction
+			const mode = MODES[randomInt(R, 0, MODES.length - 1)]; // color mix mode
+			for (let col = 0; col < numCols; col++) {
+				fieldCells.push({
+					x: zone.x + col * cellW - offset,
+					y: yPos,
+					w: cellW,
+					h: cellH,
+					dir,
+					mode,
+				});
+			}
+			yPos += rowHeights[row];
+		}
+
+		// Fill the zone with gradient-cell texture using the field's sub-palette
+		applyCells(graphics, fieldPal, fieldCells);
+
+		// --- Smear at field boundary edges for a soft painterly look ---
+		// We call drawSmear directly (not applySmear) because applySmear uses
+		// config.width/height as its coordinate space — we need zone-relative coords.
+		// d=1 north, d=2 east, d=3 south, d=4 west (see drawSmear).
+		const smearCount = randomInt(R, 2, 4);
+		for (let s = 0; s < smearCount; s++) {
+			const sw = zone.width * (0.1 + R() * 0.3);
+			const sh = Math.max(4, zone.height * (0.05 + R() * 0.1));
+
+			if (isVertical) {
+				// Vertical bands: smear east/west to soften left and right edges
+				const sy = zone.y + R() * zone.height;
+				const d = R() < 0.5 ? 2 : 4; // east or west
+				drawSmear(graphics, zone.x + R() * zone.width * 0.1, sy, sw, sh, d);          // left edge
+				drawSmear(graphics, zone.x + zone.width * (0.9 + R() * 0.1), sy, sw, sh, d); // right edge
+			} else {
+				// Horizontal bands: smear north/south to soften top and bottom edges
+				const sx = zone.x + R() * zone.width;
+				const d = R() < 0.5 ? 1 : 3; // north or south
+				drawSmear(graphics, sx, zone.y + R() * zone.height * 0.1, sw, sh, d);          // top edge
+				drawSmear(graphics, sx, zone.y + zone.height * (0.9 + R() * 0.1), sw, sh, d); // bottom edge
+			}
+		}
+	}
+
+	// --- Shared post-processing — same as normal mode, applied once to full buffer ---
+	// applyAtmosphere washes only the top ~45% of the canvas (hardcoded in its implementation)
+	// so it naturally affects the topmost field without touching lower fields.
+	applyAtmosphere(graphics, pal, cfg.hazeStrength);
+	applyLightLeaks(graphics, pal, cfg.lightLeakCount, createRng(cfg.lightLeakSeed));
+	applyPostProcess(graphics, cfg.bgColor || "#111", cfg.vigStrength, cfg.grainAmt, cfg.grainSeed);
+	applyChromatic(graphics, cfg.chromaShift);
+}
+
 function draw() {
 	if (!pallet) return;
 	background(config.bgColor || "#111");
 
-	initScene(pg, config, pallet, cells);
+	// Branch between Rothko Mode (~4% of tokens) and the standard mosaic composition.
+	// initRothkoScene does not need the pre-built cells array — it builds its own per zone.
+	config.isRothko
+		? initRothkoScene(pg, config, pallet)
+		: initScene(pg, config, pallet, cells);
 	image(pg, 0, 0, width, height);
 
 	$fx.preview();
