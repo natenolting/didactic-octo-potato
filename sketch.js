@@ -2,6 +2,9 @@ let pallets = [];
 let pallet, cols, rows;
 let cells = [];
 let pg;
+// Tracks canvas orientation for the current token — set in setup() after palette load.
+// canvasSize() reads this to produce the correct aspect ratio for the display canvas.
+let isPortrait = false;
 // full size file, 4K
 const fullWidth = 3840;
 const fullHeight = 2160;
@@ -186,16 +189,17 @@ function buildRothkoZones(cfg) {
 }
 
 function canvasSize() {
-	const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
-	return { w: Math.floor(1920 * scale), h: Math.floor(1080 * scale) };
+	// Swap base dimensions for portrait orientation (isPortrait set in setup after palette load).
+	const baseW = isPortrait ? fullHeight : fullWidth;
+	const baseH = isPortrait ? fullWidth : fullHeight;
+	const scale = Math.min(windowWidth / baseW, windowHeight / baseH);
+	return { w: Math.floor(baseW * scale), h: Math.floor(baseH * scale) };
 }
 
 function setup() {
+	// Create display canvas at landscape default; resized after orientation is determined.
 	const { w, h } = canvasSize();
 	createCanvas(w, h);
-	config.width = fullWidth;
-	config.height = fullHeight;
-	pg = createGraphics(config.width, config.height);
 	noLoop();
 	// Seed p5's Perlin noise so outputs are deterministic for a given token/seed.
 	noiseSeed(Math.round(R() * 0xffffffff));
@@ -209,6 +213,31 @@ function setup() {
 			pallet.push(suggestColor(pallet));
 			pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
 
+			// --- Determine canvas orientation BEFORE creating pg ---
+			// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
+			// When active, draw() calls initRothkoScene() instead of initScene().
+			//config.isRothko = R() < 0.04;
+			config.isRothko = true;
+			if (config.isRothko) {
+				config.fieldCount = randomInt(R, 2, 3);         // 2 or 3 color fields
+				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical"; // bands stacked top-bottom or left-right
+			}
+			// Canvas format: Rothko horizontal bands → portrait (taller than wide, Rothko-like),
+			// Rothko vertical bands → landscape, normal tokens → portrait ~15% of the time.
+			isPortrait = config.isRothko
+				? config.rothkoOrientation === "horizontal"
+				: R() < 0.15;
+			config.isPortrait = isPortrait;
+
+			// Set the off-screen canvas dimensions based on orientation (swap W/H for portrait).
+			config.width = isPortrait ? fullHeight : fullWidth;
+			config.height = isPortrait ? fullWidth : fullHeight;
+			pg = createGraphics(config.width, config.height);
+			// Resize the display canvas to match the new aspect ratio.
+			const { w: dw, h: dh } = canvasSize();
+			resizeCanvas(dw, dh);
+
+			// --- General config (now that config.width/height and pg are available) ---
 			config.cols = randomInt(R, 6, 22);
 			config.rows = randomInt(R, 5, 14);
 			config.cellwidth = pg.width / config.cols;
@@ -224,15 +253,10 @@ function setup() {
 			config.lightLeakCount = randomInt(R, 2, 6);
 			config.lightLeakSeed = Math.round(R() * 0xffffffff);
 
-			// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
-			// When active, draw() calls initRothkoScene() instead of initScene().
-			//config.isRothko = R() < 0.04;
-			config.isRothko = true;
+			// Rothko-specific geometry (uses config.width/height, so must come after pg creation).
 			if (config.isRothko) {
-				config.fieldCount = randomInt(R, 2, 3); // 2 or 3 color fields
 				config.fieldGap = Math.round(config.height * (0.01 + R() * 0.02)); // gap between fields (bgColor shows through)
 				config.fieldMargin = Math.round(config.width * (0.02 + R() * 0.02)); // margin on all four canvas sides
-				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical"; // bands stacked top-bottom or left-right
 			}
 			config.captureCells = randomInt(R, 5, 10);
 			config.pixelationLevels = [
@@ -323,6 +347,8 @@ function setup() {
 						? "Vertical Fields"
 						: "Horizontal Fields"
 					: "Mosaic",
+				// Canvas orientation — portrait for Rothko horizontal bands and ~15% of normal tokens.
+				Format: config.isPortrait ? "Portrait" : "Landscape",
 			});
 			console.log(
 				"seed:",
