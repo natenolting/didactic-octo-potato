@@ -864,7 +864,9 @@ function initRothkoScene(graphics, cfg, pal) {
 		// --- Build mini cell grid constrained to zone bounds ---
 		const cols = randomInt(R, 6, 16);
 		const rows = randomInt(R, 3, 7);
-		const cellW = zone.width / cols;
+		// Ceiling ensures cellW is an integer — avoids hairline gaps caused by
+		// fractional cellW leaving sub-pixel holes between adjacent cells.
+		const cellW = Math.ceil(zone.width / cols);
 
 		// Variable row heights — same weighted normalization as normal mode
 		const rawH = Array.from({ length: rows }, () => 0.6 + R() * 0.8);
@@ -883,8 +885,8 @@ function initRothkoScene(graphics, cfg, pal) {
 		let yPos = zone.y;
 		for (let row = 0; row < rows; row++) {
 			const cellH = rowHeights[row];
-			// Brick offset on odd rows (same as normal cell layout)
-			const offset = row % 2 === 1 ? cellW * 0.5 : 0;
+			// Brick offset on odd rows — rounded to integer so x positions stay pixel-aligned.
+			const offset = row % 2 === 1 ? Math.round(cellW / 2) : 0;
 			const numCols = row % 2 === 1 ? cols + 1 : cols; // extra cell covers brick gap
 			const dir = R() < 0.5 ? "h" : "v"; // horizontal or vertical gradient direction
 			const mode = MODES[randomInt(R, 0, MODES.length - 1)]; // color mix mode
