@@ -106,9 +106,7 @@ function clusterByHue(pal, count) {
 
 	// Low hue variance → fall back to luminance order (palette already sorted dark→light)
 	const sorted =
-		spread < 60
-			? [...pal]
-			: withHue.sort((a, b) => a.h - b.h).map((x) => x.c);
+		spread < 60 ? [...pal] : withHue.sort((a, b) => a.h - b.h).map((x) => x.c);
 
 	// Divide sorted colors evenly into count groups
 	const size = Math.ceil(sorted.length / count);
@@ -149,7 +147,10 @@ function buildRothkoZones(cfg) {
 
 	// Random weights give each field a different size — same pattern as normal row heights.
 	// The span being divided is height (horizontal layout) or width (vertical layout).
-	const rawSizes = Array.from({ length: cfg.fieldCount }, () => 0.6 + R() * 0.8);
+	const rawSizes = Array.from(
+		{ length: cfg.fieldCount },
+		() => 0.6 + R() * 0.8,
+	);
 	const totalRaw = rawSizes.reduce((a, b) => a + b, 0);
 	const usableSpan = (isVertical ? usableW : usableH) - totalGap;
 	const sizes = rawSizes.map((s) =>
@@ -164,10 +165,20 @@ function buildRothkoZones(cfg) {
 	for (let i = 0; i < cfg.fieldCount; i++) {
 		if (isVertical) {
 			// Vertical layout: advance left-to-right; height spans full usable height
-			zones.push({ x: pos, y: cfg.fieldMargin, width: sizes[i], height: usableH });
+			zones.push({
+				x: pos,
+				y: cfg.fieldMargin,
+				width: sizes[i],
+				height: usableH,
+			});
 		} else {
 			// Horizontal layout: advance top-to-bottom; width spans full usable width
-			zones.push({ x: cfg.fieldMargin, y: pos, width: usableW, height: sizes[i] });
+			zones.push({
+				x: cfg.fieldMargin,
+				y: pos,
+				width: usableW,
+				height: sizes[i],
+			});
 		}
 		pos += sizes[i] + cfg.fieldGap;
 	}
@@ -215,12 +226,13 @@ function setup() {
 
 			// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
 			// When active, draw() calls initRothkoScene() instead of initScene().
-			config.isRothko = R() < 0.04;
+			//config.isRothko = R() < 0.04;
+			config.isRothko = true;
 			if (config.isRothko) {
-				config.fieldCount = randomInt(R, 2, 3);         // 2 or 3 color fields
-				config.fieldGap = Math.round(config.height * (0.01 + R() * 0.02));   // gap between fields (bgColor shows through)
+				config.fieldCount = randomInt(R, 2, 3); // 2 or 3 color fields
+				config.fieldGap = Math.round(config.height * (0.01 + R() * 0.02)); // gap between fields (bgColor shows through)
 				config.fieldMargin = Math.round(config.width * (0.02 + R() * 0.02)); // margin on all four canvas sides
-				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical";   // bands stacked top-bottom or left-right
+				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical"; // bands stacked top-bottom or left-right
 			}
 			config.captureCells = randomInt(R, 5, 10);
 			config.pixelationLevels = [
@@ -264,10 +276,12 @@ function setup() {
 				const numCols = y % 2 === 1 ? rowCols + 1 : rowCols;
 
 				for (let x = 0; x < numCols; x++) {
+					const xStart = Math.round(x * rowCellW - rowOffset);
+					const xEnd = Math.round((x + 1) * rowCellW - rowOffset);
 					cells.push({
-						x: x * rowCellW - rowOffset,
+						x: xStart,
 						y: yPos,
-						w: rowCellW,
+						w: xEnd - xStart,
 						h: cellH,
 						dir,
 						mode,
@@ -305,7 +319,9 @@ function setup() {
 				Clarity: clarity,
 				// "Horizontal Fields" or "Vertical Fields" for Rothko tokens; "Mosaic" for everyone else.
 				Composition: config.isRothko
-					? (config.rothkoOrientation === "vertical" ? "Vertical Fields" : "Horizontal Fields")
+					? config.rothkoOrientation === "vertical"
+						? "Vertical Fields"
+						: "Horizontal Fields"
 					: "Mosaic",
 			});
 			console.log(
@@ -835,8 +851,10 @@ function initRothkoScene(graphics, cfg, pal) {
 	graphics.noStroke();
 
 	const isVertical = cfg.rothkoOrientation === "vertical";
-	const zones = buildRothkoZones(cfg);          // bounding rect per field
-	const clusters = clusterByHue(pal, zones.length); // one sub-palette per field
+	const zones = buildRothkoZones(cfg); // bounding rect per field
+	// Exclude pallet[0] (bgColor — the darkest color) from field palettes so no
+	// field can be rendered in the background color and disappear.
+	const clusters = clusterByHue(pal.slice(1), zones.length); // one sub-palette per field
 	const MODES = ["lab", "lch", "hsl"];
 
 	for (let zi = 0; zi < zones.length; zi++) {
@@ -899,14 +917,28 @@ function initRothkoScene(graphics, cfg, pal) {
 				// Vertical bands: smear east/west to soften left and right edges
 				const sy = zone.y + R() * zone.height;
 				const d = R() < 0.5 ? 2 : 4; // east or west
-				drawSmear(graphics, zone.x + R() * zone.width * 0.1, sy, sw, sh, d);          // left edge
-				drawSmear(graphics, zone.x + zone.width * (0.9 + R() * 0.1), sy, sw, sh, d); // right edge
+				drawSmear(graphics, zone.x + R() * zone.width * 0.1, sy, sw, sh, d); // left edge
+				drawSmear(
+					graphics,
+					zone.x + zone.width * (0.9 + R() * 0.1),
+					sy,
+					sw,
+					sh,
+					d,
+				); // right edge
 			} else {
 				// Horizontal bands: smear north/south to soften top and bottom edges
 				const sx = zone.x + R() * zone.width;
 				const d = R() < 0.5 ? 1 : 3; // north or south
-				drawSmear(graphics, sx, zone.y + R() * zone.height * 0.1, sw, sh, d);          // top edge
-				drawSmear(graphics, sx, zone.y + zone.height * (0.9 + R() * 0.1), sw, sh, d); // bottom edge
+				drawSmear(graphics, sx, zone.y + R() * zone.height * 0.1, sw, sh, d); // top edge
+				drawSmear(
+					graphics,
+					sx,
+					zone.y + zone.height * (0.9 + R() * 0.1),
+					sw,
+					sh,
+					d,
+				); // bottom edge
 			}
 		}
 	}
@@ -915,8 +947,19 @@ function initRothkoScene(graphics, cfg, pal) {
 	// applyAtmosphere washes only the top ~45% of the canvas (hardcoded in its implementation)
 	// so it naturally affects the topmost field without touching lower fields.
 	applyAtmosphere(graphics, pal, cfg.hazeStrength);
-	applyLightLeaks(graphics, pal, cfg.lightLeakCount, createRng(cfg.lightLeakSeed));
-	applyPostProcess(graphics, cfg.bgColor || "#111", cfg.vigStrength, cfg.grainAmt, cfg.grainSeed);
+	applyLightLeaks(
+		graphics,
+		pal,
+		cfg.lightLeakCount,
+		createRng(cfg.lightLeakSeed),
+	);
+	applyPostProcess(
+		graphics,
+		cfg.bgColor || "#111",
+		cfg.vigStrength,
+		cfg.grainAmt,
+		cfg.grainSeed,
+	);
 	applyChromatic(graphics, cfg.chromaShift);
 }
 
