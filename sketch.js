@@ -222,174 +222,174 @@ function setup() {
 	const { w, h } = canvasSize();
 	createCanvas(w, h);
 	noLoop();
-	// Seed p5's Perlin noise so outputs are deterministic for a given token/seed.
+
+	// ─── ALL R() draws happen synchronously BEFORE fetch() ───────────────────
+	// The fxhash sandbox sends "fxhash_getInfo" immediately on iframe load and
+	// reads $fx.getFeatures() at that moment. Everything must be set before the
+	// fetch resolves. The fetch callback only loads palette hex colors.
+	// ─────────────────────────────────────────────────────────────────────────
+
 	noiseSeed(Math.round(R() * 0xffffffff));
+
+	// Palette index — pool size is always 1000 (we own the file).
+	config.pallet = Math.floor(R() * 1000);
+
+	// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
+	// When active, draw() calls initRothkoScene() instead of initScene().
+	config.isRothko = R() < 0.04;
+	// config.isRothko = true; // dev override
+	if (config.isRothko) {
+		config.fieldCount = randomInt(R, 2, 3);
+		config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical";
+		// Always burn 1 R() for the potential palette reroll so the stream stays
+		// consistent whether or not the reroll fires (decided in fetch after colors load).
+		config._rerollRand = R();
+	}
+
+	// Canvas format: Rothko horizontal → portrait, vertical → landscape, normal → ~15% portrait.
+	isPortrait = config.isRothko
+		? config.rothkoOrientation === "horizontal"
+		: R() < 0.15;
+	config.isPortrait = isPortrait;
+
+	// Off-screen buffer dimensions (swap W/H for portrait).
+	config.width = isPortrait ? fullHeight : fullWidth;
+	config.height = isPortrait ? fullWidth : fullHeight;
+	pg = createGraphics(config.width, config.height);
+	const { w: dw, h: dh } = canvasSize();
+	resizeCanvas(dw, dh);
+
+	config.cols = randomInt(R, 6, 22);
+	config.rows = randomInt(R, 5, 14);
+	config.cellwidth = config.width / config.cols;
+	config.smears = randomInt(R, 2, 6);
+	config.squareWaves = randomInt(R, 2, 4);
+	config.vigStrength = 0;
+	config.grainAmt = 8 + R() * 14;
+	config.grainSeed = Math.round(R() * 0xffffffff);
+	config.chromaShift = floor(1 + R() * 4);
+	config.hazeStrength = 0.12 + R() * 0.3;
+	config.lightLeakCount = randomInt(R, 2, 6);
+	config.lightLeakSeed = Math.round(R() * 0xffffffff);
+
+	if (config.isRothko) {
+		config.fieldGap = Math.round(config.height * (0.01 + R() * 0.02));
+		config.fieldMargin = Math.round(config.width * (0.02 + R() * 0.02));
+	}
+	config.captureCells = randomInt(R, 5, 10);
+	config.pixelationLevels = [
+		randomInt(R, 2, 4),
+		randomInt(R, 5, 10),
+		randomInt(R, 12, 20),
+	];
+
+	// Build cell grid — layout only, no palette colors needed.
+	const GAP = 0;
+	const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
+	const totalRaw = rawH.reduce((a, b) => a + b, 0);
+	const rowHeights = rawH.map((rh) =>
+		Math.max(3, Math.round((rh / totalRaw) * config.height)),
+	);
+	const hDrift = config.height - rowHeights.reduce((a, b) => a + b, 0);
+	rowHeights[rowHeights.length - 1] = Math.max(
+		3,
+		rowHeights[rowHeights.length - 1] + hDrift,
+	);
+
+	const MODES = ["lab", "lch", "hsl"];
+	let hCount = 0,
+		vCount = 0;
+	let yPos = 0;
+	for (let y = 0; y < config.rows; y++) {
+		const cellH = Math.max(2, rowHeights[y] - GAP);
+		const rowNorm = y / config.rows;
+		const hProb = rowNorm < 0.4 ? 0.85 : rowNorm < 0.7 ? 0.6 : 0.35;
+		const dir = R() < hProb ? "h" : "v";
+		const mode = MODES[randomInt(R, 0, MODES.length - 1)];
+		dir === "h" ? hCount++ : vCount++;
+
+		const isRestZone =
+			(rowNorm < 0.45 && R() < 0.4) || (rowNorm > 0.75 && R() < 0.3);
+		const restDivisor = isRestZone ? randomInt(R, 2, 4) : 1;
+		const rowCols = Math.max(2, Math.floor(config.cols / restDivisor));
+		const rowCellW = config.width / rowCols;
+		const rowOffset = y % 2 === 1 ? rowCellW * 0.5 : 0;
+		const numCols = y % 2 === 1 ? rowCols + 1 : rowCols;
+
+		for (let x = 0; x < numCols; x++) {
+			const xStart = Math.round(x * rowCellW - rowOffset);
+			const xEnd = Math.round((x + 1) * rowCellW - rowOffset);
+			cells.push({
+				x: xStart,
+				y: yPos,
+				w: xEnd - xStart,
+				h: cellH,
+				dir,
+				mode,
+			});
+		}
+		yPos += rowHeights[y];
+	}
+
+	// Compute features from the synchronously-built config.
+	const totalCells = config.cols * config.rows;
+	const density =
+		totalCells < 60 ? "Sparse" : totalCells < 160 ? "Medium" : "Dense";
+	const flowRatio = hCount / config.rows;
+	const flow =
+		flowRatio > 0.7 ? "Horizontal" : flowRatio < 0.3 ? "Vertical" : "Mixed";
+	const vibe =
+		config.vigStrength < 0.55
+			? "Open"
+			: config.vigStrength < 0.72
+				? "Focused"
+				: "Dramatic";
+	const clarity =
+		config.chromaShift <= 1
+			? "Sharp"
+			: config.chromaShift <= 3
+				? "Soft"
+				: "Dreamy";
+
+	// Called synchronously — sandbox reads this immediately on fxhash_getInfo.
+	$fx.features({
+		Pallet: "Pallet " + config.pallet,
+		Density: density,
+		Flow: flow,
+		Vibe: vibe,
+		Clarity: clarity,
+		Composition: config.isRothko
+			? config.rothkoOrientation === "vertical"
+				? "Vertical Fields"
+				: "Horizontal Fields"
+			: "Mosaic",
+		Format: config.isPortrait ? "Portrait" : "Landscape",
+	});
+
+	// ─── Fetch palette hex colors — the only async dependency ────────────────
 	fetch("1000.json")
 		.then((res) => res.json())
 		.then((data) => {
 			pallets = data;
-			config.pallet = Math.floor(R() * pallets.length);
 			pallet = [...pallets[config.pallet]];
 			pallet.push(suggestColor(pallet));
 			pallet.push(suggestColor(pallet));
 			pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
+			config.bgColor = pallet[0];
 
-			// --- Determine canvas orientation BEFORE creating pg ---
-			// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
-			// When active, draw() calls initRothkoScene() instead of initScene().
-			config.isRothko = R() < 0.04;
-			if (config.isRothko) {
-				config.fieldCount = randomInt(R, 2, 3); // 2 or 3 color fields
-				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical"; // bands stacked top-bottom or left-right
-
-				// If the selected palette is too low-contrast, reroll once.
-				// Palettes with avgDE < 20 produce muddy, indistinct Rothko fields
-				// because clusterByHue splits near-identical colors across zones.
-				// One reroll is enough — just pick a different palette index.
-				if (paletteDeltaE(pallet) < 20) {
-					const rerollIdx = Math.floor(R() * pallets.length);
-					pallet = [...pallets[rerollIdx]];
-					pallet.push(suggestColor(pallet));
-					pallet.push(suggestColor(pallet));
-					pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
-					config.pallet = rerollIdx;
-				}
-			}
-			// Canvas format: Rothko horizontal bands → portrait (taller than wide, Rothko-like),
-			// Rothko vertical bands → landscape, normal tokens → portrait ~15% of the time.
-			isPortrait = config.isRothko
-				? config.rothkoOrientation === "horizontal"
-				: R() < 0.15;
-			config.isPortrait = isPortrait;
-
-			// Set the off-screen canvas dimensions based on orientation (swap W/H for portrait).
-			config.width = isPortrait ? fullHeight : fullWidth;
-			config.height = isPortrait ? fullWidth : fullHeight;
-			pg = createGraphics(config.width, config.height);
-			// Resize the display canvas to match the new aspect ratio.
-			const { w: dw, h: dh } = canvasSize();
-			resizeCanvas(dw, dh);
-
-			// --- General config (now that config.width/height and pg are available) ---
-			config.cols = randomInt(R, 6, 22);
-			config.rows = randomInt(R, 5, 14);
-			config.cellwidth = pg.width / config.cols;
-			config.bgColor = pallet[0]; // darkest palette color
-			config.smears = randomInt(R, 2, 6);
-			config.squareWaves = randomInt(R, 2, 4);
-			//config.vigStrength = 0.45 + R() * 0.45; // 0.45–0.9
-			config.vigStrength = 0; // 0.45–0.9
-			config.grainAmt = 8 + R() * 14; // 8–22 per channel
-			config.grainSeed = Math.round(R() * 0xffffffff);
-			config.chromaShift = floor(1 + R() * 4); // 1–4 px channel split
-			config.hazeStrength = 0.12 + R() * 0.3; // 0.12–0.42 atmospheric fade
-			config.lightLeakCount = randomInt(R, 2, 6);
-			config.lightLeakSeed = Math.round(R() * 0xffffffff);
-
-			// Rothko-specific geometry (uses config.width/height, so must come after pg creation).
-			if (config.isRothko) {
-				config.fieldGap = Math.round(config.height * (0.01 + R() * 0.02)); // gap between fields (bgColor shows through)
-				config.fieldMargin = Math.round(config.width * (0.02 + R() * 0.02)); // margin on all four canvas sides
-			}
-			config.captureCells = randomInt(R, 5, 10);
-			config.pixelationLevels = [
-				randomInt(R, 2, 4),
-				randomInt(R, 5, 10),
-				randomInt(R, 12, 20),
-			];
-			// Variable row heights — random weights, normalized to fill pg.height exactly.
-			const GAP = 0; // px gap between rows (shows bgColor)
-			const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
-			const totalRaw = rawH.reduce((a, b) => a + b, 0);
-			const rowHeights = rawH.map((h) =>
-				Math.max(3, Math.round((h / totalRaw) * pg.height)),
-			);
-			const hDrift = pg.height - rowHeights.reduce((a, b) => a + b, 0);
-			rowHeights[rowHeights.length - 1] = Math.max(
-				3,
-				rowHeights[rowHeights.length - 1] + hDrift,
-			);
-
-			const MODES = ["lab", "lch", "hsl"];
-			let hCount = 0,
-				vCount = 0;
-			let yPos = 0;
-			for (let y = 0; y < config.rows; y++) {
-				const cellH = Math.max(2, rowHeights[y] - GAP);
-				// Bias gradient direction: horizontal at top (sky), more vertical lower (terrain)
-				const rowNorm = y / config.rows;
-				const hProb = rowNorm < 0.4 ? 0.85 : rowNorm < 0.7 ? 0.6 : 0.35;
-				const dir = R() < hProb ? "h" : "v";
-				const mode = MODES[randomInt(R, 0, MODES.length - 1)];
-				dir === "h" ? hCount++ : vCount++;
-
-				// Rest zones: sky and ground rows can use fewer, wider cells for breathing room
-				const isRestZone =
-					(rowNorm < 0.45 && R() < 0.4) || (rowNorm > 0.75 && R() < 0.3);
-				const restDivisor = isRestZone ? randomInt(R, 2, 4) : 1;
-				const rowCols = Math.max(2, Math.floor(config.cols / restDivisor));
-				const rowCellW = pg.width / rowCols;
-				const rowOffset = y % 2 === 1 ? rowCellW * 0.5 : 0;
-				const numCols = y % 2 === 1 ? rowCols + 1 : rowCols;
-
-				for (let x = 0; x < numCols; x++) {
-					const xStart = Math.round(x * rowCellW - rowOffset);
-					const xEnd = Math.round((x + 1) * rowCellW - rowOffset);
-					cells.push({
-						x: xStart,
-						y: yPos,
-						w: xEnd - xStart,
-						h: cellH,
-						dir,
-						mode,
-					});
-				}
-				yPos += rowHeights[y];
+			// Palette contrast reroll — uses the pre-burned _rerollRand value.
+			// config.pallet (and the Pallet feature) reflects the original draw;
+			// this only affects rendered colors for ~2% of Rothko tokens.
+			if (config.isRothko && paletteDeltaE(pallet) < 20) {
+				const rerollIdx = Math.floor(config._rerollRand * pallets.length);
+				pallet = [...pallets[rerollIdx]];
+				pallet.push(suggestColor(pallet));
+				pallet.push(suggestColor(pallet));
+				pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
+				config.bgColor = pallet[0];
 			}
 
-			const totalCells = config.cols * config.rows;
-			const density =
-				totalCells < 60 ? "Sparse" : totalCells < 160 ? "Medium" : "Dense";
-			const flowRatio = hCount / config.rows;
-			const flow =
-				flowRatio > 0.7 ? "Horizontal" : flowRatio < 0.3 ? "Vertical" : "Mixed";
-
-			const vibe =
-				config.vigStrength < 0.55
-					? "Open"
-					: config.vigStrength < 0.72
-						? "Focused"
-						: "Dramatic";
-
-			const clarity =
-				config.chromaShift <= 1
-					? "Sharp"
-					: config.chromaShift <= 3
-						? "Soft"
-						: "Dreamy";
-
-			$fx.features({
-				Pallet: "Pallet " + config.pallet,
-				Density: density,
-				Flow: flow,
-				Vibe: vibe,
-				Clarity: clarity,
-				// "Horizontal Fields" or "Vertical Fields" for Rothko tokens; "Mosaic" for everyone else.
-				Composition: config.isRothko
-					? config.rothkoOrientation === "vertical"
-						? "Vertical Fields"
-						: "Horizontal Fields"
-					: "Mosaic",
-				// Canvas orientation — portrait for Rothko horizontal bands and ~15% of normal tokens.
-				Format: config.isPortrait ? "Portrait" : "Landscape",
-			});
-			console.log(
-				"seed:",
-				_seedParam ?? $fx.hash,
-				"features:",
-				$fx.getFeatures(),
-			);
-
+			console.log("seed:", _seedParam ?? $fx.hash, "features:", $fx.getFeatures());
 			redraw();
 		});
 }
