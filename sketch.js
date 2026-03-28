@@ -56,10 +56,12 @@ const config = {};
  */
 function paletteDeltaE(pal) {
 	const labs = pal.map((c) => chroma(c).lab());
-	let total = 0, count = 0;
+	let total = 0,
+		count = 0;
 	for (let a = 0; a < labs.length; a++) {
 		for (let b = a + 1; b < labs.length; b++) {
-			const [l1, a1, b1] = labs[a], [l2, a2, b2] = labs[b];
+			const [l1, a1, b1] = labs[a],
+				[l2, a2, b2] = labs[b];
 			total += Math.sqrt((l1 - l2) ** 2 + (a1 - a2) ** 2 + (b1 - b2) ** 2);
 			count++;
 		}
@@ -236,7 +238,6 @@ function setup() {
 			// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
 			// When active, draw() calls initRothkoScene() instead of initScene().
 			config.isRothko = R() < 0.04;
-			//config.isRothko = true; // TESTING
 			if (config.isRothko) {
 				config.fieldCount = randomInt(R, 2, 3); // 2 or 3 color fields
 				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical"; // bands stacked top-bottom or left-right
@@ -840,13 +841,9 @@ function initScene(graphics, config, pallet, cells) {
 		.slice(0, config.captureCells);
 	const capture = captureCells(graphics, newCells);
 
+	const newCellsPlain = shuffle([...cells]).slice(0, config.captureCells);
 
-  const newCellsPlain = shuffle([...cells]).slice(
-    0,
-    config.captureCells,
-  );
-
-  const capturePlain = captureCells(graphics, newCellsPlain);
+	const capturePlain = captureCells(graphics, newCellsPlain);
 
 	// Atmospheric haze — sky wash on the upper portion
 	applyAtmosphere(graphics, pallet, config.hazeStrength);
@@ -857,10 +854,10 @@ function initScene(graphics, config, pallet, cells) {
 	// Square wave effect
 	applySquareWave(graphics, cells, pallet, config.squareWaves);
 
-  // apply back some of the captured cells without pixelation or square wave for contrast
-  for(let i = 0; i < capturePlain.length; i++) {
-    graphics.image(capturePlain[i], newCellsPlain[i].x, newCellsPlain[i].y);
-  }
+	// apply back some of the captured cells without pixelation or square wave for contrast
+	for (let i = 0; i < capturePlain.length; i++) {
+		graphics.image(capturePlain[i], newCellsPlain[i].x, newCellsPlain[i].y);
+	}
 
 	//use the captured cells
 	for (let i = 0; i < capture.length; i++) {
