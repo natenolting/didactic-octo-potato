@@ -49,6 +49,25 @@ function randomInt(rng, minValue, maxValue) {
 const config = {};
 
 /**
+ * Returns the average pairwise CIE76 deltaE across all color pairs in pal.
+ * Used to detect low-contrast palettes before Rothko Mode rendering.
+ * @param {string[]} pal - Array of hex color strings.
+ * @returns {number}
+ */
+function paletteDeltaE(pal) {
+	const labs = pal.map((c) => chroma(c).lab());
+	let total = 0, count = 0;
+	for (let a = 0; a < labs.length; a++) {
+		for (let b = a + 1; b < labs.length; b++) {
+			const [l1, a1, b1] = labs[a], [l2, a2, b2] = labs[b];
+			total += Math.sqrt((l1 - l2) ** 2 + (a1 - a2) ** 2 + (b1 - b2) ** 2);
+			count++;
+		}
+	}
+	return count > 0 ? total / count : 0;
+}
+
+/**
  * Suggests a harmonious new color for the given palette.
  * Picks a hue at the largest gap in the existing hue wheel,
  * then adjusts luminance to fill whichever tonal role is missing
@@ -221,6 +240,19 @@ function setup() {
 			if (config.isRothko) {
 				config.fieldCount = randomInt(R, 2, 3); // 2 or 3 color fields
 				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical"; // bands stacked top-bottom or left-right
+
+				// If the selected palette is too low-contrast, reroll once.
+				// Palettes with avgDE < 20 produce muddy, indistinct Rothko fields
+				// because clusterByHue splits near-identical colors across zones.
+				// One reroll is enough — just pick a different palette index.
+				if (paletteDeltaE(pallet) < 20) {
+					const rerollIdx = Math.floor(R() * pallets.length);
+					pallet = [...pallets[rerollIdx]];
+					pallet.push(suggestColor(pallet));
+					pallet.push(suggestColor(pallet));
+					pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
+					config.pallet = rerollIdx;
+				}
 			}
 			// Canvas format: Rothko horizontal bands → portrait (taller than wide, Rothko-like),
 			// Rothko vertical bands → landscape, normal tokens → portrait ~15% of the time.
