@@ -216,10 +216,10 @@ function setup() {
 			// --- Determine canvas orientation BEFORE creating pg ---
 			// Rothko Mode: ~4% chance of a rare "stacked color fields" composition.
 			// When active, draw() calls initRothkoScene() instead of initScene().
-			//config.isRothko = R() < 0.04;
-			config.isRothko = true;
+			config.isRothko = R() < 0.04;
+			//config.isRothko = true; // TESTING
 			if (config.isRothko) {
-				config.fieldCount = randomInt(R, 2, 3);         // 2 or 3 color fields
+				config.fieldCount = randomInt(R, 2, 3); // 2 or 3 color fields
 				config.rothkoOrientation = R() < 0.5 ? "horizontal" : "vertical"; // bands stacked top-bottom or left-right
 			}
 			// Canvas format: Rothko horizontal bands → portrait (taller than wide, Rothko-like),
@@ -807,6 +807,14 @@ function initScene(graphics, config, pallet, cells) {
 		.slice(0, config.captureCells);
 	const capture = captureCells(graphics, newCells);
 
+
+  const newCellsPlain = shuffle([...cells]).slice(
+    0,
+    config.captureCells,
+  );
+
+  const capturePlain = captureCells(graphics, newCellsPlain);
+
 	// Atmospheric haze — sky wash on the upper portion
 	applyAtmosphere(graphics, pallet, config.hazeStrength);
 
@@ -815,6 +823,11 @@ function initScene(graphics, config, pallet, cells) {
 
 	// Square wave effect
 	applySquareWave(graphics, cells, pallet, config.squareWaves);
+
+  // apply back some of the captured cells without pixelation or square wave for contrast
+  for(let i = 0; i < capturePlain.length; i++) {
+    graphics.image(capturePlain[i], newCellsPlain[i].x, newCellsPlain[i].y);
+  }
 
 	//use the captured cells
 	for (let i = 0; i < capture.length; i++) {
@@ -932,6 +945,22 @@ function initRothkoScene(graphics, cfg, pal) {
 		// Fill the zone with gradient-cell texture using the field's sub-palette
 		applyCells(graphics, fieldPal, fieldCells);
 
+		// capture cells for later
+		const newFieldCells = shuffle([...fieldCells])
+			.sort((a, b) => b.w * b.h - a.w * a.h)
+			.slice(0, config.captureCells);
+		const capture = captureCells(graphics, newFieldCells);
+
+		const newFieldCellsPlain = shuffle([...fieldCells]).slice(
+			0,
+			config.captureCells,
+		);
+
+		const capturePlain = captureCells(graphics, newFieldCellsPlain);
+
+		// Square wave effect
+		applySquareWave(graphics, fieldCells, fieldPal, config.squareWaves);
+
 		// --- Smear at field boundary edges for a soft painterly look ---
 		// We call drawSmear directly (not applySmear) because applySmear uses
 		// config.width/height as its coordinate space — we need zone-relative coords.
@@ -968,6 +997,26 @@ function initRothkoScene(graphics, cfg, pal) {
 					d,
 				); // bottom edge
 			}
+		}
+
+		// use plain captured cells
+		for (let i = 0; i < capturePlain.length; i++) {
+			graphics.image(
+				capturePlain[i],
+				newFieldCellsPlain[i].x,
+				newFieldCellsPlain[i].y,
+			);
+		}
+
+		//use the captured cells
+		for (let i = 0; i < capture.length; i++) {
+			drawPixelation(
+				graphics,
+				capture[i],
+				newFieldCells[i].x,
+				newFieldCells[i].y,
+				randomInt(R, ...config.pixelationLevels),
+			);
 		}
 	}
 
