@@ -6,6 +6,8 @@ Rare tokens resolve into something quieter: broad stacked fields inspired by Rot
 
 ## UI
 
+Click anywhere to zoom in 3× to that point; click again to zoom out.
+
 Press "s" to save the current token as an image.
 
 ## Build
