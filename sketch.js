@@ -1284,7 +1284,7 @@ function setup() {
 
 	// Rothko Mode: ~10% chance of a rare "stacked color fields" composition.
 	// When active, draw() calls initRothkoScene() instead of initScene().
-	config.isRothko = R() < 0.1;
+	config.isRothko = R() < 0.07;
 	if (config.isRothko) {
 		// Field count: weighted toward 2–3 but 4–5 possible for denser compositions.
 		const fc = R();
@@ -1338,7 +1338,7 @@ function setup() {
 		// Bleed  — no margins; fields run edge-to-edge; only gap shows background.
 		// Frame  — exaggerated margins; background becomes a bold compositional element.
 		const es = R();
-		config.rothkoEdgeStyle = es < 0.4 ? "float" : es < 0.72 ? "bleed" : "frame";
+		config.rothkoEdgeStyle = es < 0.50 ? "float" : es < 0.85 ? "bleed" : "frame";
 		if (config.rothkoEdgeStyle === "bleed") {
 			config.fieldMargin = 0;
 			config.fieldGap = Math.round(config.height * (0.008 + R() * 0.025));
@@ -1419,6 +1419,8 @@ function setup() {
 			: config.chromaShift <= 3
 				? "Soft"
 				: "Dreamy";
+	const grain =
+		config.grainAmt < 12 ? "Still" : config.grainAmt < 18 ? "Dusted" : "Worn";
 
 	// Called synchronously — sandbox reads this immediately on fxhash_getInfo.
 	$fx.features({
@@ -1441,7 +1443,7 @@ function setup() {
 						config.rothkoProportionMode.charAt(0).toUpperCase() +
 						config.rothkoProportionMode.slice(1),
 				}
-			: {}),
+			: { Grain: grain }),
 	});
 
 	// ─── Fetch palette hex colors — the only async dependency ────────────────
