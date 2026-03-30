@@ -20,6 +20,14 @@ const fullHeight = 2160;
 // Prod (no ?seed param): delegates to $fx.rand(), seeded by the token hash.
 // Dev  (?seed=42):       uses a local mulberry32 RNG so any integer reproduces the render.
 const _seedParam = new URLSearchParams(location.search).get("seed");
+// If ?seed= holds a non-numeric fxhash hash string, redirect to ?fxhash= so
+// the SDK seeds $fx.rand() correctly. ?seed= is for integer dev seeds only.
+if (_seedParam !== null && isNaN(parseInt(_seedParam, 10))) {
+	const _url = new URL(location.href);
+	_url.searchParams.set("fxhash", _seedParam);
+	_url.searchParams.delete("seed");
+	location.replace(_url.toString());
+}
 const R = (() => {
 	if (_seedParam === null) return () => $fx.rand();
 	let s = parseInt(_seedParam, 10) >>> 0 || 1;
@@ -47,6 +55,16 @@ function createRng(seed) {
 
 function randomRange(rng, minValue, maxValue) {
 	return minValue + (maxValue - minValue) * rng();
+}
+
+// Deterministic Fisher-Yates shuffle using R() — use instead of p5's shuffle().
+function shuffleR(arr) {
+	const a = [...arr];
+	for (let i = a.length - 1; i > 0; i--) {
+		const j = Math.floor(R() * (i + 1));
+		[a[i], a[j]] = [a[j], a[i]];
+	}
+	return a;
 }
 
 function randomInt(rng, minValue, maxValue) {
@@ -1313,6 +1331,7 @@ function setup() {
 	config.hazeStrength = 0.12 + R() * 0.3;
 	config.lightLeakCount = randomInt(R, 2, 6);
 	config.lightLeakSeed = Math.round(R() * 0xffffffff);
+	config.noiseSeed = Math.round(R() * 0xffffffff); // seed for p5 noise() — must be set via noiseSeed() before any noise() call
 
 	if (config.isRothko) {
 		// Edge style governs margins and gap character.
@@ -1737,7 +1756,10 @@ function applyLightLeaks(graphics, pal, count, rng) {
  * @param {string[]} pal - Palette array sorted darkest-to-lightest.
  * @param waveIndex - integer index of the wave (0,1,2...) to ensure different noise patterns if multiple waves are drawn
  */
-function drawSquareWave(graphics, cellList, pal, waveIndex = 0) {
+function drawSquareWave(graphics, cellList, pal, waveIndex = 0, noiseSeedVal = 0) {
+	// Seed p5's Perlin noise from the token's deterministic seed so renders are
+	// reproducible. Without this, noise() uses a random internal seed each load.
+	noiseSeed(noiseSeedVal);
 	const noiseScale = 0.28;
 	// Unique offset per wave so each one picks a different row and path.
 	const wo = waveIndex * 13.7;
@@ -1866,10 +1888,9 @@ function applySmear(graphics, smears) {
 	}
 }
 
-function applySquareWave(graphics, cells, pallet, waves) {
-	// square wave
+function applySquareWave(graphics, cells, pallet, waves, noiseSeedVal = 0) {
 	for (let i = 0; i < waves; i++) {
-		drawSquareWave(graphics, cells, pallet, i);
+		drawSquareWave(graphics, cells, pallet, i, noiseSeedVal);
 	}
 }
 
@@ -1915,12 +1936,12 @@ function initScene(graphics, config, pallet, cells) {
 	applyCells(graphics, pallet, cells);
 
 	// capture cells for later
-	const newCells = shuffle([...cells])
+	const newCells = shuffleR(cells)
 		.sort((a, b) => b.w * b.h - a.w * a.h)
 		.slice(0, config.captureCells);
 	const capture = captureCells(graphics, newCells);
 
-	const newCellsPlain = shuffle([...cells]).slice(0, config.captureCells);
+	const newCellsPlain = shuffleR(cells).slice(0, config.captureCells);
 
 	const capturePlain = captureCells(graphics, newCellsPlain);
 
@@ -1931,7 +1952,7 @@ function initScene(graphics, config, pallet, cells) {
 	applySmear(graphics, config.smears);
 
 	// Square wave effect
-	applySquareWave(graphics, cells, pallet, config.squareWaves);
+	applySquareWave(graphics, cells, pallet, config.squareWaves, config.noiseSeed);
 
 	// apply back some of the captured cells without pixelation or square wave for contrast
 	for (let i = 0; i < capturePlain.length; i++) {
@@ -2037,12 +2058,12 @@ function initRothkoScene(graphics, cfg, pal) {
 		applyCells(graphics, fieldPal, fieldCells);
 
 		// capture cells for later
-		const newFieldCells = shuffle([...fieldCells])
+		const newFieldCells = shuffleR(fieldCells)
 			.sort((a, b) => b.w * b.h - a.w * a.h)
 			.slice(0, config.captureCells);
 		const capture = captureCells(graphics, newFieldCells);
 
-		const newFieldCellsPlain = shuffle([...fieldCells]).slice(
+		const newFieldCellsPlain = shuffleR(fieldCells).slice(
 			0,
 			config.captureCells,
 		);
@@ -2050,7 +2071,7 @@ function initRothkoScene(graphics, cfg, pal) {
 		const capturePlain = captureCells(graphics, newFieldCellsPlain);
 
 		// Square wave effect
-		applySquareWave(graphics, fieldCells, fieldPal, config.squareWaves);
+		applySquareWave(graphics, fieldCells, fieldPal, config.squareWaves, config.noiseSeed);
 
 		// --- Smear at field boundary edges for a soft painterly look ---
 		// We call drawSmear directly (not applySmear) because applySmear uses
