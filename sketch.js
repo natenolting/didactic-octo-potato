@@ -6,7 +6,7 @@ let pg;
 // canvasSize() reads this to produce the correct aspect ratio for the display canvas.
 let isPortrait = false;
 let pgReady = false;
-let zoomState = "out";     // "out" | "animIn" | "in" | "animOut"
+let zoomState = "out"; // "out" | "animIn" | "in" | "animOut"
 let zoomCenterPgX = 0;
 let zoomCenterPgY = 0;
 let animStartTime = 0;
@@ -98,7 +98,10 @@ function suggestColor(pal) {
 	// Without this, NaN propagates into novelH and causes chroma.lch() to throw,
 	// which bubbles up through the fetch .then() chain to .catch(), where $fx.preview()
 	// fires on an unrendered white canvas, producing blank outputs.
-	const hues = lchs.map((lch) => lch[2]).filter((h) => !isNaN(h)).sort((a, b) => a - b);
+	const hues = lchs
+		.map((lch) => lch[2])
+		.filter((h) => !isNaN(h))
+		.sort((a, b) => a - b);
 	let maxHueGap = 0,
 		gapStart = hues.length > 0 ? hues[hues.length - 1] : 0;
 	for (let i = 0; i < hues.length; i++) {
@@ -111,7 +114,8 @@ function suggestColor(pal) {
 	}
 	// Fall back to hue 0 when every palette color is achromatic.
 	const novelH = hues.length > 0 ? (gapStart + maxHueGap / 2) % 360 : 0;
-	const avgC = lchs.reduce((s, lch) => s + (isNaN(lch[1]) ? 0 : lch[1]), 0) / lchs.length;
+	const avgC =
+		lchs.reduce((s, lch) => s + (isNaN(lch[1]) ? 0 : lch[1]), 0) / lchs.length;
 
 	if (!hasDark) return chroma.lch(18, Math.min(avgC * 0.9, 45), novelH).hex();
 	if (!hasLight) return chroma.lch(92, Math.min(avgC * 0.3, 18), novelH).hex();
@@ -1262,7 +1266,7 @@ function setup() {
 
 	// Rothko Mode: ~10% chance of a rare "stacked color fields" composition.
 	// When active, draw() calls initRothkoScene() instead of initScene().
-	config.isRothko = R() < 0.10;
+	config.isRothko = R() < 0.1;
 	if (config.isRothko) {
 		// Field count: weighted toward 2–3 but 4–5 possible for denser compositions.
 		const fc = R();
@@ -1944,25 +1948,6 @@ function initScene(graphics, config, pallet, cells) {
 			randomInt(R, ...config.pixelationLevels),
 		);
 	}
-	// Light leaks — soft color bars bleeding in from canvas edges
-	applyLightLeaks(
-		graphics,
-		pallet,
-		config.lightLeakCount,
-		createRng(config.lightLeakSeed),
-	);
-
-	// Vignette + film grain in a single pixel pass
-	applyPostProcess(
-		graphics,
-		config.bgColor || "#111",
-		config.vigStrength,
-		config.grainAmt,
-		config.grainSeed,
-	);
-
-	// Chromatic aberration — RGB channel split
-	applyChromatic(graphics, config.chromaShift);
 }
 
 /**
@@ -2126,7 +2111,9 @@ function initRothkoScene(graphics, cfg, pal) {
 			);
 		}
 	}
+}
 
+function postProcessing(graphics, cfg, pal) {
 	// --- Shared post-processing — same as normal mode, applied once to full buffer ---
 	// applyAtmosphere washes only the top ~45% of the canvas (hardcoded in its implementation)
 	// so it naturally affects the topmost field without touching lower fields.
@@ -2158,6 +2145,10 @@ function draw() {
 		config.isRothko
 			? initRothkoScene(pg, config, pallet)
 			: initScene(pg, config, pallet, cells);
+
+		// apply post prossing effects (atmosphere, light leaks, grain, chromatic aberration)
+		postProcessing(pg, config, pallet);
+
 		pgReady = true;
 		$fx.preview();
 		cursor(HAND);
@@ -2167,7 +2158,10 @@ function draw() {
 	let srcX, srcY, srcW, srcH;
 
 	if (zoomState === "out") {
-		srcX = 0; srcY = 0; srcW = pg.width; srcH = pg.height;
+		srcX = 0;
+		srcY = 0;
+		srcW = pg.width;
+		srcH = pg.height;
 		noLoop();
 	} else if (zoomState === "in") {
 		srcW = pg.width / ZOOM_LEVEL;
