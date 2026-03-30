@@ -36,15 +36,15 @@ console.log('PALETTE_NAMES updated in sketch.js');
 
 ## Features
 
-- **Pallet** — one of ~1000 curated palettes, named by color family
+- **Palette** — one of ~1000 curated palettes, named by color family
 - **Composition** — Mosaic (~93%) or Horizontal/Vertical Fields (~7%, Rothko Mode)
 - **Format** — Landscape or Portrait
 - **Tesserae** — fragment count: Sparse, Medium, or Dense
 - **Current** — gradient direction: Horizontal, Mixed, or Vertical
 - **Refraction** — chromatic fringe: Sharp, Soft, or Dreamy
-- **Grain** *(Mosaic)* — film texture: Still, Dusted, or Worn
-- **Ground** *(Rothko)* — field edge treatment: Float, Bleed, or Frame
-- **Proportion** *(Rothko)* — band sizing: Balanced, Dominant, or Staggered
+- **Grain** _(Mosaic)_ — film texture: Still, Dusted, or Worn
+- **Ground** _(Rothko)_ — field edge treatment: Float, Bleed, or Frame
+- **Proportion** _(Rothko)_ — band sizing: Balanced, Dominant, or Staggered
 
 ## Tools Used
 

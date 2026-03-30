@@ -1,5 +1,5 @@
-let pallets = [];
-let pallet, cols, rows;
+let palettes = [];
+let palette, cols, rows;
 let cells = [];
 let pg;
 // Tracks canvas orientation for the current token — set in setup() after palette load.
@@ -1280,7 +1280,7 @@ function setup() {
 	noiseSeed(Math.round(R() * 0xffffffff));
 
 	// Palette index — pool size matches the PALETTE_NAMES / 1000.json array length.
-	config.pallet = Math.floor(R() * PALETTE_NAMES.length);
+	config.palette = Math.floor(R() * PALETTE_NAMES.length);
 
 	// Rothko Mode: ~10% chance of a rare "stacked color fields" composition.
 	// When active, draw() calls initRothkoScene() instead of initScene().
@@ -1338,7 +1338,7 @@ function setup() {
 		// Bleed  — no margins; fields run edge-to-edge; only gap shows background.
 		// Frame  — exaggerated margins; background becomes a bold compositional element.
 		const es = R();
-		config.rothkoEdgeStyle = es < 0.50 ? "float" : es < 0.85 ? "bleed" : "frame";
+		config.rothkoEdgeStyle = es < 0.5 ? "float" : es < 0.85 ? "bleed" : "frame";
 		if (config.rothkoEdgeStyle === "bleed") {
 			config.fieldMargin = 0;
 			config.fieldGap = Math.round(config.height * (0.008 + R() * 0.025));
@@ -1424,7 +1424,7 @@ function setup() {
 
 	// Called synchronously — sandbox reads this immediately on fxhash_getInfo.
 	$fx.features({
-		Pallet: PALETTE_NAMES[config.pallet],
+		Palette: PALETTE_NAMES[config.palette],
 		Tesserae: density,
 		Current: flow,
 		Refraction: clarity,
@@ -1450,23 +1450,23 @@ function setup() {
 	fetch("1000.json")
 		.then((res) => res.json())
 		.then((data) => {
-			pallets = data;
-			pallet = [...pallets[config.pallet]];
-			pallet.push(suggestColor(pallet));
-			pallet.push(suggestColor(pallet));
-			pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
-			config.bgColor = pallet[0];
+			palettes = data;
+			palette = [...palettes[config.palette]];
+			palette.push(suggestColor(palette));
+			palette.push(suggestColor(palette));
+			palette.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
+			config.bgColor = palette[0];
 
 			// Palette contrast reroll — uses the pre-burned _rerollRand value.
-			// config.pallet (and the Pallet feature) reflects the original draw;
+			// config.palette (and the palette feature) reflects the original draw;
 			// this only affects rendered colors for ~2% of Rothko tokens.
-			if (config.isRothko && paletteDeltaE(pallet) < 20) {
-				const rerollIdx = Math.floor(config._rerollRand * pallets.length);
-				pallet = [...pallets[rerollIdx]];
-				pallet.push(suggestColor(pallet));
-				pallet.push(suggestColor(pallet));
-				pallet.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
-				config.bgColor = pallet[0];
+			if (config.isRothko && paletteDeltaE(palette) < 20) {
+				const rerollIdx = Math.floor(config._rerollRand * palettes.length);
+				palette = [...palettes[rerollIdx]];
+				palette.push(suggestColor(palette));
+				palette.push(suggestColor(palette));
+				palette.sort((a, b) => chroma(a).luminance() - chroma(b).luminance());
+				config.bgColor = palette[0];
 			}
 
 			console.log(
@@ -1479,7 +1479,7 @@ function setup() {
 		})
 		.catch((err) => {
 			console.error("Palette load failed:", err);
-			// Call $fx.preview() directly — pallet is still null so going through
+			// Call $fx.preview() directly — palette is still null so going through
 			// draw() would just return early. This ensures fxsnapshot doesn't time
 			// out waiting for the fxhash-preview event.
 			$fx.preview();
@@ -1604,7 +1604,8 @@ function applyAtmosphere(source, pal, strength) {
  */
 function applyPostProcess(source, grainAmt, grainSeed) {
 	source.loadPixels();
-	const w = source.width, h = source.height;
+	const w = source.width,
+		h = source.height;
 	const pix = source.pixels;
 	const grain = createRng(grainSeed);
 
@@ -1612,7 +1613,7 @@ function applyPostProcess(source, grainAmt, grainSeed) {
 		for (let x = 0; x < w; x++) {
 			const noise = (grain() - 0.5) * 2 * grainAmt;
 			const idx = (y * w + x) << 2;
-			pix[idx]     = Math.min(255, Math.max(0, (pix[idx]     + noise) | 0));
+			pix[idx] = Math.min(255, Math.max(0, (pix[idx] + noise) | 0));
 			pix[idx + 1] = Math.min(255, Math.max(0, (pix[idx + 1] + noise) | 0));
 			pix[idx + 2] = Math.min(255, Math.max(0, (pix[idx + 2] + noise) | 0));
 		}
@@ -1727,7 +1728,13 @@ function applyLightLeaks(graphics, pal, count, rng) {
  * @param {string[]} pal - Palette array sorted darkest-to-lightest.
  * @param waveIndex - integer index of the wave (0,1,2...) to ensure different noise patterns if multiple waves are drawn
  */
-function drawSquareWave(graphics, cellList, pal, waveIndex = 0, noiseSeedVal = 0) {
+function drawSquareWave(
+	graphics,
+	cellList,
+	pal,
+	waveIndex = 0,
+	noiseSeedVal = 0,
+) {
 	// Seed p5's Perlin noise from the token's deterministic seed so renders are
 	// reproducible. Without this, noise() uses a random internal seed each load.
 	noiseSeed(noiseSeedVal);
@@ -1803,20 +1810,20 @@ function drawSquareWave(graphics, cellList, pal, waveIndex = 0, noiseSeedVal = 0
 	}
 }
 
-function applyCells(graphics, pallet, cells) {
-	let newPallet = [...pallet];
+function applyCells(graphics, palette, cells) {
+	let newPalette = [...palette];
 	let cc = 0;
 	for (let i = 0; i < cells.length; i++) {
 		let cell = cells[i];
 
 		// Bias palette index by vertical position: top → lighter, bottom → darker.
-		// pallet is sorted dark[0] → light[last], so invert yNorm.
+		// palette is sorted dark[0] → light[last], so invert yNorm.
 		const yNorm = cell.y / graphics.height;
-		const yBias = floor((1 - yNorm) * newPallet.length * 0.75);
-		const biasedCc = (cc + yBias) % newPallet.length;
+		const yBias = floor((1 - yNorm) * newPalette.length * 0.75);
+		const biasedCc = (cc + yBias) % newPalette.length;
 
-		let fc = newPallet[biasedCc % newPallet.length];
-		let nc = newPallet[(biasedCc + 1) % newPallet.length];
+		let fc = newPalette[biasedCc % newPalette.length];
+		let nc = newPalette[(biasedCc + 1) % newPalette.length];
 
 		if (cell.dir === "v") {
 			for (let g = 0; g < cell.h; g++) {
@@ -1832,11 +1839,11 @@ function applyCells(graphics, pallet, cells) {
 			}
 		}
 
-		if (i % newPallet.length === newPallet.length - 1) {
+		if (i % newPalette.length === newPalette.length - 1) {
 			// Consume the same RNG calls for compatibility, then re-sort by luminance
 			// so the vertical position bias always indexes light→dark correctly.
-			[...newPallet].sort(() => R() - 0.5);
-			newPallet = [...pallet]; // reset to luminance-sorted original
+			[...newPalette].sort(() => R() - 0.5);
+			newPalette = [...palette]; // reset to luminance-sorted original
 			cc = -1;
 		}
 		cc++;
@@ -1859,9 +1866,9 @@ function applySmear(graphics, smears) {
 	}
 }
 
-function applySquareWave(graphics, cells, pallet, waves, noiseSeedVal = 0) {
+function applySquareWave(graphics, cells, palette, waves, noiseSeedVal = 0) {
 	for (let i = 0; i < waves; i++) {
-		drawSquareWave(graphics, cells, pallet, i, noiseSeedVal);
+		drawSquareWave(graphics, cells, palette, i, noiseSeedVal);
 	}
 }
 
@@ -1899,12 +1906,12 @@ function drawPixelation(graphics, source, x, y, level) {
 }
 
 // initate the scene by applying all effects in order
-function initScene(graphics, config, pallet, cells) {
+function initScene(graphics, config, palette, cells) {
 	graphics.background(config.bgColor || "#111");
 	graphics.noStroke();
 
 	// Core cell structure with gradient fills
-	applyCells(graphics, pallet, cells);
+	applyCells(graphics, palette, cells);
 
 	// capture cells for later
 	const newCells = shuffleR(cells)
@@ -1917,13 +1924,19 @@ function initScene(graphics, config, pallet, cells) {
 	const capturePlain = captureCells(graphics, newCellsPlain);
 
 	// Atmospheric haze — sky wash on the upper portion
-	applyAtmosphere(graphics, pallet, config.hazeStrength);
+	applyAtmosphere(graphics, palette, config.hazeStrength);
 
 	// Smear effect — biased horizontal in upper half (clouds), random in lower half (terrain)
 	applySmear(graphics, config.smears);
 
 	// Square wave effect
-	applySquareWave(graphics, cells, pallet, config.squareWaves, config.noiseSeed);
+	applySquareWave(
+		graphics,
+		cells,
+		palette,
+		config.squareWaves,
+		config.noiseSeed,
+	);
 
 	// apply back some of the captured cells without pixelation or square wave for contrast
 	for (let i = 0; i < capturePlain.length; i++) {
@@ -1973,7 +1986,7 @@ function initRothkoScene(graphics, cfg, pal) {
 
 	const isVertical = cfg.rothkoOrientation === "vertical";
 	const zones = buildRothkoZones(cfg); // bounding rect per field
-	// Exclude pallet[0] (bgColor — the darkest color) from field palettes so no
+	// Exclude palette[0] (bgColor — the darkest color) from field palettes so no
 	// field can be rendered in the background color and disappear.
 	const clusters = clusterByHue(pal.slice(1), zones.length); // one sub-palette per field
 	const MODES = ["lab", "lch", "hsl"];
@@ -2042,7 +2055,13 @@ function initRothkoScene(graphics, cfg, pal) {
 		const capturePlain = captureCells(graphics, newFieldCellsPlain);
 
 		// Square wave effect
-		applySquareWave(graphics, fieldCells, fieldPal, config.squareWaves, config.noiseSeed);
+		applySquareWave(
+			graphics,
+			fieldCells,
+			fieldPal,
+			config.squareWaves,
+			config.noiseSeed,
+		);
 
 		// --- Smear at field boundary edges for a soft painterly look ---
 		// We call drawSmear directly (not applySmear) because applySmear uses
@@ -2121,7 +2140,7 @@ function postProcessing(graphics, cfg, pal) {
 }
 
 function draw() {
-	if (!pallet) return;
+	if (!palette) return;
 
 	// Render to pg once — subsequent calls (animation frames) only update the viewport.
 	if (!pgReady) {
@@ -2129,11 +2148,11 @@ function draw() {
 		// Branch between Rothko Mode (~10% of tokens) and the standard mosaic composition.
 		// initRothkoScene does not need the pre-built cells array — it builds its own per zone.
 		config.isRothko
-			? initRothkoScene(pg, config, pallet)
-			: initScene(pg, config, pallet, cells);
+			? initRothkoScene(pg, config, palette)
+			: initScene(pg, config, palette, cells);
 
 		// apply post prossing effects (atmosphere, light leaks, grain, chromatic aberration)
-		postProcessing(pg, config, pallet);
+		postProcessing(pg, config, palette);
 
 		pgReady = true;
 		$fx.preview();
