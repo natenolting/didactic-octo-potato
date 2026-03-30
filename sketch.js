@@ -1430,10 +1430,10 @@ function setup() {
 	// Called synchronously — sandbox reads this immediately on fxhash_getInfo.
 	$fx.features({
 		Pallet: PALETTE_NAMES[config.pallet],
-		Density: density,
-		Flow: flow,
-		Vibe: vibe,
-		Clarity: clarity,
+		Tesserae: density,
+		Current: flow,
+		Presence: vibe,
+		Refraction: clarity,
 		Composition: config.isRothko
 			? config.rothkoOrientation === "vertical"
 				? "Vertical Fields"
@@ -1442,10 +1442,10 @@ function setup() {
 		Format: config.isPortrait ? "Portrait" : "Landscape",
 		...(config.isRothko
 			? {
-					"Field Style":
+					Ground:
 						config.rothkoEdgeStyle.charAt(0).toUpperCase() +
 						config.rothkoEdgeStyle.slice(1),
-					"Field Weight":
+					Proportion:
 						config.rothkoProportionMode.charAt(0).toUpperCase() +
 						config.rothkoProportionMode.slice(1),
 				}
