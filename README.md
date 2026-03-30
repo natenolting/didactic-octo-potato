@@ -41,7 +41,6 @@ console.log('PALETTE_NAMES updated in sketch.js');
 - **Format** — Landscape or Portrait
 - **Tesserae** — fragment count: Sparse, Medium, or Dense
 - **Current** — gradient direction: Horizontal, Mixed, or Vertical
-- **Presence** — vignette depth: Open, Focused, or Dramatic
 - **Refraction** — chromatic fringe: Sharp, Soft, or Dreamy
 - **Ground** *(Rothko)* — field edge treatment: Float, Bleed, or Frame
 - **Proportion** *(Rothko)* — band sizing: Balanced, Dominant, or Staggered

@@ -1324,7 +1324,6 @@ function setup() {
 	config.cellwidth = config.width / config.cols;
 	config.smears = randomInt(R, 2, 6);
 	config.squareWaves = randomInt(R, 2, 4);
-	config.vigStrength = 0;
 	config.grainAmt = 8 + R() * 14;
 	config.grainSeed = Math.round(R() * 0xffffffff);
 	config.chromaShift = floor(1 + R() * 4);
@@ -1414,12 +1413,6 @@ function setup() {
 	const flowRatio = hCount / config.rows;
 	const flow =
 		flowRatio > 0.7 ? "Horizontal" : flowRatio < 0.3 ? "Vertical" : "Mixed";
-	const vibe =
-		config.vigStrength < 0.55
-			? "Open"
-			: config.vigStrength < 0.72
-				? "Focused"
-				: "Dramatic";
 	const clarity =
 		config.chromaShift <= 1
 			? "Sharp"
@@ -1432,7 +1425,6 @@ function setup() {
 		Pallet: PALETTE_NAMES[config.pallet],
 		Tesserae: density,
 		Current: flow,
-		Presence: vibe,
 		Refraction: clarity,
 		Composition: config.isRothko
 			? config.rothkoOrientation === "vertical"
@@ -1602,48 +1594,25 @@ function applyAtmosphere(source, pal, strength) {
 }
 
 /**
- * Applies vignette and film grain to a graphics buffer in a single pixel pass.
- * Vignette blends each pixel toward bgHex based on distance from center.
- * Grain adds deterministic per-pixel luminance noise using a seeded RNG.
+ * Applies film grain to a graphics buffer.
+ * Adds deterministic per-pixel luminance noise using a seeded RNG.
  * @param {p5.Graphics} source
- * @param {string} bgHex - darkest palette color, used for vignette target
- * @param {number} vigStrength - 0–1, how strongly the vignette blends (0=none, 1=full black edges)
  * @param {number} grainAmt - max per-channel noise in 0–255 range
  * @param {number} grainSeed - integer seed for the grain RNG (deterministic)
  */
-function applyPostProcess(source, bgHex, vigStrength, grainAmt, grainSeed) {
+function applyPostProcess(source, grainAmt, grainSeed) {
 	source.loadPixels();
-	const w = source.width,
-		h = source.height;
-	const cx = w * 0.5,
-		cy = h * 0.5;
-	const [dr, dg, db] = chroma(bgHex).rgb();
+	const w = source.width, h = source.height;
 	const pix = source.pixels;
 	const grain = createRng(grainSeed);
 
 	for (let y = 0; y < h; y++) {
-		const ny = (y - cy) / cy;
-		const ny2 = ny * ny;
 		for (let x = 0; x < w; x++) {
-			const nx = (x - cx) / cx;
-			// Use squared distance to avoid sqrt — smooth ramp from r=0.5 to r=1.2
-			const distSq = nx * nx + ny2;
-			const vig =
-				Math.min(1, Math.max(0, (distSq - 0.25) / 1.19)) * vigStrength;
 			const noise = (grain() - 0.5) * 2 * grainAmt;
 			const idx = (y * w + x) << 2;
-			pix[idx] = Math.min(
-				255,
-				Math.max(0, (pix[idx] + (dr - pix[idx]) * vig + noise) | 0),
-			);
-			pix[idx + 1] = Math.min(
-				255,
-				Math.max(0, (pix[idx + 1] + (dg - pix[idx + 1]) * vig + noise) | 0),
-			);
-			pix[idx + 2] = Math.min(
-				255,
-				Math.max(0, (pix[idx + 2] + (db - pix[idx + 2]) * vig + noise) | 0),
-			);
+			pix[idx]     = Math.min(255, Math.max(0, (pix[idx]     + noise) | 0));
+			pix[idx + 1] = Math.min(255, Math.max(0, (pix[idx + 1] + noise) | 0));
+			pix[idx + 2] = Math.min(255, Math.max(0, (pix[idx + 2] + noise) | 0));
 		}
 	}
 	source.updatePixels();
@@ -2145,13 +2114,7 @@ function postProcessing(graphics, cfg, pal) {
 		cfg.lightLeakCount,
 		createRng(cfg.lightLeakSeed),
 	);
-	applyPostProcess(
-		graphics,
-		cfg.bgColor || "#111",
-		cfg.vigStrength,
-		cfg.grainAmt,
-		cfg.grainSeed,
-	);
+	applyPostProcess(graphics, cfg.grainAmt, cfg.grainSeed);
 	applyChromatic(graphics, cfg.chromaShift);
 }
 
