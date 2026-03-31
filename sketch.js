@@ -1272,6 +1272,7 @@ function setup() {
 	// Create display canvas at landscape default; resized after orientation is determined.
 	const { w, h } = canvasSize();
 	createCanvas(w, h);
+	frameRate(24);
 	noLoop();
 
 	// ─── ALL R() draws happen synchronously BEFORE fetch() ───────────────────
@@ -2202,7 +2203,43 @@ function draw() {
 		noLoop();
 	}
 
-	image(pg, 0, 0, width, height);
+	if (!animating) {
+		image(pg, 0, 0, width, height);
+		return;
+	}
+
+	// Animation frame — composite scrolling strips onto animatedPg.
+	// config.bgColor is always set by the time animation runs (palette load completes before pgReady).
+	animatedPg.background(config.bgColor);
+
+	if (config.isRothko) {
+		for (let i = 0; i < rothkoZones.length; i++) {
+			const zone = rothkoZones[i];
+			const sw = rowStrips[i].width;
+			const offset = ((rowOffsets[i] % sw) + sw) % sw;
+			// Clip to zone bounds — prevents bleed into margins or adjacent zones.
+			animatedPg.drawingContext.save();
+			animatedPg.drawingContext.beginPath();
+			animatedPg.drawingContext.rect(zone.x, zone.y, zone.width, zone.height);
+			animatedPg.drawingContext.clip();
+			animatedPg.image(rowStrips[i], zone.x + offset,      zone.y);
+			animatedPg.image(rowStrips[i], zone.x + offset - sw, zone.y);
+			animatedPg.drawingContext.restore();
+			rowOffsets[i] += rowSpeeds[i] * rowDirections[i];
+		}
+	} else {
+		let yPos = 0;
+		for (let i = 0; i < rowStrips.length; i++) {
+			const sw = rowStrips[i].width;
+			const offset = ((rowOffsets[i] % sw) + sw) % sw;
+			animatedPg.image(rowStrips[i], offset,      yPos);
+			animatedPg.image(rowStrips[i], offset - sw, yPos);
+			rowOffsets[i] += rowSpeeds[i] * rowDirections[i];
+			yPos += rowHeights[i];
+		}
+	}
+
+	image(animatedPg, 0, 0, width, height);
 }
 
 function keyPressed() {
