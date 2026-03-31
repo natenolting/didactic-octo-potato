@@ -12,6 +12,7 @@ let rowOffsets = []; // current x-offset per strip (pg-space pixels)
 let rowDirections = []; // +1 or -1 per strip — seeded, deterministic per token
 let rowSpeeds = []; // pixels/frame per strip — seeded, ~0.5–4 at 4K
 let rowHeights = []; // mosaic row heights in pg pixels — assigned in setup()
+let rowDrawHeights = []; // strip heights used for draw() compositing — equals rowHeights for mosaic, equal divisions for Rothko
 let rothkoZones = []; // Rothko field zone rects — assigned in initRothkoScene()
 let animating = false; // true while animation loop is running
 let stripsReady = false; // guards one-time strip capture in initStrips()
@@ -2152,53 +2153,47 @@ function postProcessing(graphics, cfg, pal) {
 /**
  * Captures per-strip images from pg and seeds per-strip direction/speed.
  * Called once on first spacebar press, guarded by stripsReady.
- * Mosaic: one strip per rowHeights entry, full pg width.
- * Rothko: one strip per rothkoZones entry, zone width only.
+ * Mosaic: one strip per rowHeights entry (follows the cell grid layout).
+ * Rothko: equal-height strips using the same count as rowHeights — the mosaic grid
+ * heights are uneven and can leave large unbroken sections on Rothko renders.
  */
 function initStrips() {
 	if (stripsReady) return;
 
 	animatedPg = createGraphics(pg.width, pg.height);
 	const animRng = createRng(config.animSeed);
+	const count = rowHeights.length;
+
+	// Generate directions from seeded RNG.
+	for (let i = 0; i < count; i++) {
+		rowDirections[i] = animRng() < 0.5 ? -1 : 1;
+	}
+	// Generate speeds, sort ascending so top strip is slowest, bottom fastest (parallax).
+	const speeds = Array.from({ length: count }, () => 0.5 + animRng() * 3.5);
+	speeds.sort((a, b) => a - b);
 
 	if (config.isRothko) {
-		const count = rothkoZones.length;
-		// Generate directions and raw speeds from seeded RNG.
+		// Equal-height strips — avoids one oversized mosaic row dominating the Rothko render.
+		const stripH = Math.floor(pg.height / count);
 		for (let i = 0; i < count; i++) {
-			rowDirections[i] = animRng() < 0.5 ? -1 : 1;
-		}
-		const speeds = Array.from(
-			{ length: count },
-			() => 0.5 + animRng() * randomRange(R, 4, 32),
-		);
-		// Sort ascending so top zone is slowest, bottom zone is fastest (parallax depth).
-		speeds.sort((a, b) => a - b);
-		for (let i = 0; i < count; i++) {
-			const zone = rothkoZones[i];
-			rowStrips[i] = pg.get(zone.x, zone.y, zone.width, zone.height);
+			const yPos = i * stripH;
+			const h = i === count - 1 ? pg.height - yPos : stripH;
+			rowStrips[i] = pg.get(0, yPos, pg.width, h);
+			rowDrawHeights[i] = h;
 			rowSpeeds[i] = speeds[i];
 			rowOffsets[i] = 0;
 		}
 	} else {
-		const count = rowHeights.length;
-		// Generate directions and raw speeds from seeded RNG.
-		for (let i = 0; i < count; i++) {
-			rowDirections[i] = animRng() < 0.5 ? -1 : 1;
-		}
-		const speeds = Array.from(
-			{ length: count },
-			() => 0.5 + animRng() * randomRange(R, 4, 32),
-		);
-		// Sort ascending so top row is slowest, bottom row is fastest (parallax depth).
-		speeds.sort((a, b) => a - b);
 		let yPos = 0;
 		for (let i = 0; i < count; i++) {
 			rowStrips[i] = pg.get(0, yPos, pg.width, rowHeights[i]);
+			rowDrawHeights[i] = rowHeights[i];
 			rowSpeeds[i] = speeds[i];
 			rowOffsets[i] = 0;
 			yPos += rowHeights[i];
 		}
 	}
+
 	stripsReady = true;
 }
 
@@ -2232,31 +2227,14 @@ function draw() {
 	// config.bgColor is always set by the time animation runs (palette load completes before pgReady).
 	animatedPg.background(config.bgColor);
 
-	if (config.isRothko) {
-		for (let i = 0; i < rothkoZones.length; i++) {
-			const zone = rothkoZones[i];
-			const sw = rowStrips[i].width;
-			const offset = ((rowOffsets[i] % sw) + sw) % sw;
-			// Clip to zone bounds — prevents bleed into margins or adjacent zones.
-			animatedPg.drawingContext.save();
-			animatedPg.drawingContext.beginPath();
-			animatedPg.drawingContext.rect(zone.x, zone.y, zone.width, zone.height);
-			animatedPg.drawingContext.clip();
-			animatedPg.image(rowStrips[i], zone.x + offset, zone.y);
-			animatedPg.image(rowStrips[i], zone.x + offset - sw, zone.y);
-			animatedPg.drawingContext.restore();
-			rowOffsets[i] += rowSpeeds[i] * rowDirections[i];
-		}
-	} else {
-		let yPos = 0;
-		for (let i = 0; i < rowStrips.length; i++) {
-			const sw = rowStrips[i].width;
-			const offset = ((rowOffsets[i] % sw) + sw) % sw;
-			animatedPg.image(rowStrips[i], offset, yPos);
-			animatedPg.image(rowStrips[i], offset - sw, yPos);
-			rowOffsets[i] += rowSpeeds[i] * rowDirections[i];
-			yPos += rowHeights[i];
-		}
+	let yPos = 0;
+	for (let i = 0; i < rowStrips.length; i++) {
+		const sw = rowStrips[i].width;
+		const offset = ((rowOffsets[i] % sw) + sw) % sw;
+		animatedPg.image(rowStrips[i], offset, yPos);
+		animatedPg.image(rowStrips[i], offset - sw, yPos);
+		rowOffsets[i] += rowSpeeds[i] * rowDirections[i];
+		yPos += rowDrawHeights[i];
 	}
 
 	image(animatedPg, 0, 0, width, height);
@@ -2292,6 +2270,7 @@ function keyPressed() {
 		rowOffsets = [];
 		rowDirections = [];
 		rowSpeeds = [];
+		rowDrawHeights = [];
 		if (animatedPg) {
 			animatedPg.remove();
 			animatedPg = null;
