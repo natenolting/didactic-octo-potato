@@ -6,12 +6,6 @@ let pg;
 // canvasSize() reads this to produce the correct aspect ratio for the display canvas.
 let isPortrait = false;
 let pgReady = false;
-let zoomState = "out"; // "out" | "animIn" | "in" | "animOut"
-let zoomCenterPgX = 0;
-let zoomCenterPgY = 0;
-let animStartTime = 0;
-const ZOOM_LEVEL = 3;
-const ZOOM_DURATION = 500;
 // full size file, 4K
 const fullWidth = 3840;
 const fullHeight = 2160;
@@ -1424,7 +1418,7 @@ function setup() {
 
 	// Called synchronously — sandbox reads this immediately on fxhash_getInfo.
 	$fx.features({
-		Palette: PALETTE_NAMES[config.palette],
+		Pallet: PALETTE_NAMES[config.palette],
 		Tesserae: density,
 		Current: flow,
 		Refraction: clarity,
@@ -2156,42 +2150,10 @@ function draw() {
 
 		pgReady = true;
 		$fx.preview();
-		cursor(HAND);
+		noLoop();
 	}
 
-	// Compute source rectangle in pg coordinates from zoom state.
-	let srcX, srcY, srcW, srcH;
-
-	if (zoomState === "out") {
-		srcX = 0;
-		srcY = 0;
-		srcW = pg.width;
-		srcH = pg.height;
-		noLoop();
-	} else if (zoomState === "in") {
-		srcW = pg.width / ZOOM_LEVEL;
-		srcH = pg.height / ZOOM_LEVEL;
-		srcX = constrain(zoomCenterPgX - srcW / 2, 0, pg.width - srcW);
-		srcY = constrain(zoomCenterPgY - srcH / 2, 0, pg.height - srcH);
-		noLoop();
-	} else {
-		// Animating — smoothstep easing between out and in.
-		const elapsed = millis() - animStartTime;
-		const t = constrain(elapsed / ZOOM_DURATION, 0, 1);
-		const eased = t * t * (3 - 2 * t); // smoothstep
-		const progress = zoomState === "animIn" ? eased : 1 - eased;
-		const zoom = 1 + (ZOOM_LEVEL - 1) * progress;
-		srcW = pg.width / zoom;
-		srcH = pg.height / zoom;
-		srcX = constrain(zoomCenterPgX - srcW / 2, 0, pg.width - srcW);
-		srcY = constrain(zoomCenterPgY - srcH / 2, 0, pg.height - srcH);
-		if (t >= 1) {
-			zoomState = zoomState === "animIn" ? "in" : "out";
-			noLoop();
-		}
-	}
-
-	image(pg, 0, 0, width, height, srcX, srcY, srcW, srcH);
+	image(pg, 0, 0, width, height);
 }
 
 function keyPressed() {
@@ -2199,23 +2161,6 @@ function keyPressed() {
 		const hash = $fx.hash || "download";
 		save(pg, `${hash}.png`);
 	}
-}
-
-function mousePressed() {
-	if (!pgReady) return; // ignore clicks before first render
-	if (zoomState === "out") {
-		// Translate display coordinates → pg pixel coordinates
-		zoomCenterPgX = (mouseX / width) * pg.width;
-		zoomCenterPgY = (mouseY / height) * pg.height;
-		zoomState = "animIn";
-		animStartTime = millis();
-		loop();
-	} else if (zoomState === "in") {
-		zoomState = "animOut";
-		animStartTime = millis();
-		loop();
-	}
-	// Clicks during animation are ignored — wait for settled state
 }
 
 function windowResized() {
