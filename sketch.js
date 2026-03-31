@@ -2148,6 +2148,40 @@ function postProcessing(graphics, cfg, pal) {
 	applyChromatic(graphics, cfg.chromaShift);
 }
 
+/**
+ * Captures per-strip images from pg and seeds per-strip direction/speed.
+ * Called once on first spacebar press, guarded by stripsReady.
+ * Mosaic: one strip per rowHeights entry, full pg width.
+ * Rothko: one strip per rothkoZones entry, zone width only.
+ */
+function initStrips() {
+	if (stripsReady) return;
+
+	animatedPg = createGraphics(pg.width, pg.height);
+	const animRng = createRng(config.animSeed);
+
+	if (config.isRothko) {
+		for (let i = 0; i < rothkoZones.length; i++) {
+			const zone = rothkoZones[i];
+			rowStrips[i] = pg.get(zone.x, zone.y, zone.width, zone.height);
+			rowDirections[i] = animRng() < 0.5 ? -1 : 1;
+			rowSpeeds[i] = 0.5 + animRng() * 3.5;
+			rowOffsets[i] = 0;
+		}
+	} else {
+		let yPos = 0;
+		for (let i = 0; i < rowHeights.length; i++) {
+			rowStrips[i] = pg.get(0, yPos, pg.width, rowHeights[i]);
+			rowDirections[i] = animRng() < 0.5 ? -1 : 1;
+			rowSpeeds[i] = 0.5 + animRng() * 3.5;
+			rowOffsets[i] = 0;
+			yPos += rowHeights[i];
+		}
+	}
+
+	stripsReady = true;
+}
+
 function draw() {
 	if (!palette) return;
 
