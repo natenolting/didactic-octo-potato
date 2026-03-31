@@ -6,15 +6,15 @@ let pg;
 // canvasSize() reads this to produce the correct aspect ratio for the display canvas.
 let isPortrait = false;
 let pgReady = false;
-let animatedPg = null;     // animation composite buffer — same dimensions as pg
-let rowStrips = [];         // p5.Image per strip, captured from pg at animation init
-let rowOffsets = [];        // current x-offset per strip (pg-space pixels)
-let rowDirections = [];     // +1 or -1 per strip — seeded, deterministic per token
-let rowSpeeds = [];         // pixels/frame per strip — seeded, ~0.5–4 at 4K
-let rowHeights = [];        // mosaic row heights in pg pixels — assigned in setup()
-let rothkoZones = [];       // Rothko field zone rects — assigned in initRothkoScene()
-let animating = false;      // true while animation loop is running
-let stripsReady = false;    // guards one-time strip capture in initStrips()
+let animatedPg = null; // animation composite buffer — same dimensions as pg
+let rowStrips = []; // p5.Image per strip, captured from pg at animation init
+let rowOffsets = []; // current x-offset per strip (pg-space pixels)
+let rowDirections = []; // +1 or -1 per strip — seeded, deterministic per token
+let rowSpeeds = []; // pixels/frame per strip — seeded, ~0.5–4 at 4K
+let rowHeights = []; // mosaic row heights in pg pixels — assigned in setup()
+let rothkoZones = []; // Rothko field zone rects — assigned in initRothkoScene()
+let animating = false; // true while animation loop is running
+let stripsReady = false; // guards one-time strip capture in initStrips()
 // full size file, 4K
 const fullWidth = 3840;
 const fullHeight = 2160;
@@ -2162,24 +2162,43 @@ function initStrips() {
 	const animRng = createRng(config.animSeed);
 
 	if (config.isRothko) {
-		for (let i = 0; i < rothkoZones.length; i++) {
+		const count = rothkoZones.length;
+		// Generate directions and raw speeds from seeded RNG.
+		for (let i = 0; i < count; i++) {
+			rowDirections[i] = animRng() < 0.5 ? -1 : 1;
+		}
+		const speeds = Array.from(
+			{ length: count },
+			() => 0.5 + animRng() * randomRange(R, 4, 32),
+		);
+		// Sort ascending so top zone is slowest, bottom zone is fastest (parallax depth).
+		speeds.sort((a, b) => a - b);
+		for (let i = 0; i < count; i++) {
 			const zone = rothkoZones[i];
 			rowStrips[i] = pg.get(zone.x, zone.y, zone.width, zone.height);
-			rowDirections[i] = animRng() < 0.5 ? -1 : 1;
-			rowSpeeds[i] = 0.5 + animRng() * 3.5;
+			rowSpeeds[i] = speeds[i];
 			rowOffsets[i] = 0;
 		}
 	} else {
-		let yPos = 0;
-		for (let i = 0; i < rowHeights.length; i++) {
-			rowStrips[i] = pg.get(0, yPos, pg.width, rowHeights[i]);
+		const count = rowHeights.length;
+		// Generate directions and raw speeds from seeded RNG.
+		for (let i = 0; i < count; i++) {
 			rowDirections[i] = animRng() < 0.5 ? -1 : 1;
-			rowSpeeds[i] = 0.5 + animRng() * 3.5;
+		}
+		const speeds = Array.from(
+			{ length: count },
+			() => 0.5 + animRng() * randomRange(R, 4, 32),
+		);
+		// Sort ascending so top row is slowest, bottom row is fastest (parallax depth).
+		speeds.sort((a, b) => a - b);
+		let yPos = 0;
+		for (let i = 0; i < count; i++) {
+			rowStrips[i] = pg.get(0, yPos, pg.width, rowHeights[i]);
+			rowSpeeds[i] = speeds[i];
 			rowOffsets[i] = 0;
 			yPos += rowHeights[i];
 		}
 	}
-
 	stripsReady = true;
 }
 
@@ -2223,7 +2242,7 @@ function draw() {
 			animatedPg.drawingContext.beginPath();
 			animatedPg.drawingContext.rect(zone.x, zone.y, zone.width, zone.height);
 			animatedPg.drawingContext.clip();
-			animatedPg.image(rowStrips[i], zone.x + offset,      zone.y);
+			animatedPg.image(rowStrips[i], zone.x + offset, zone.y);
 			animatedPg.image(rowStrips[i], zone.x + offset - sw, zone.y);
 			animatedPg.drawingContext.restore();
 			rowOffsets[i] += rowSpeeds[i] * rowDirections[i];
@@ -2233,7 +2252,7 @@ function draw() {
 		for (let i = 0; i < rowStrips.length; i++) {
 			const sw = rowStrips[i].width;
 			const offset = ((rowOffsets[i] % sw) + sw) % sw;
-			animatedPg.image(rowStrips[i], offset,      yPos);
+			animatedPg.image(rowStrips[i], offset, yPos);
 			animatedPg.image(rowStrips[i], offset - sw, yPos);
 			rowOffsets[i] += rowSpeeds[i] * rowDirections[i];
 			yPos += rowHeights[i];
