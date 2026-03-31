@@ -2247,6 +2247,22 @@ function keyPressed() {
 		const hash = $fx.hash || "download";
 		save(pg, `${hash}.png`);
 	}
+	if (key === "a" || key === "A") {
+		if (stripsReady) {
+			const hash = $fx.hash || "download";
+			save(animatedPg, `${hash}-anim.png`);
+		}
+	}
+	if (key === " ") {
+		if (!pgReady) return;
+		if (!stripsReady) initStrips();
+		animating = !animating;
+		if (animating) {
+			loop();
+		} else {
+			noLoop();
+		}
+	}
 }
 
 function windowResized() {
