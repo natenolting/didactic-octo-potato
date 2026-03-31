@@ -2129,6 +2129,8 @@ function initRothkoScene(graphics, cfg, pal) {
 			);
 		}
 	}
+	// Expose zones to animation system — initStrips() reads this to capture per-zone strips.
+	rothkoZones = zones;
 }
 
 function postProcessing(graphics, cfg, pal) {
