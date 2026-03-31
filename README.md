@@ -6,7 +6,11 @@ Rare tokens resolve into something quieter: broad stacked fields inspired by Rot
 
 ## UI
 
-Press "s" to save the current token as an image.
+Press **Space** to start/stop the row animation.
+
+Press **s** to save the static render as an image.
+
+Press **a** to save the current animated frame as an image (only available after animation has been started).
 
 ## Build
 
