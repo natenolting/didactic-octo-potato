@@ -1409,6 +1409,10 @@ function setup() {
 		yPos += rowHeights[y];
 	}
 
+	// Animation seed — burned last so it does not shift any prior R() calls.
+	// Seeded per-strip directions and speeds are deterministic per token.
+	config.animSeed = Math.round(R() * 0xffffffff);
+
 	// Compute features from the synchronously-built config.
 	const totalCells = config.cols * config.rows;
 	const density =
