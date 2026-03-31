@@ -6,6 +6,15 @@ let pg;
 // canvasSize() reads this to produce the correct aspect ratio for the display canvas.
 let isPortrait = false;
 let pgReady = false;
+let animatedPg = null;     // animation composite buffer — same dimensions as pg
+let rowStrips = [];         // p5.Image per strip, captured from pg at animation init
+let rowOffsets = [];        // current x-offset per strip (pg-space pixels)
+let rowDirections = [];     // +1 or -1 per strip — seeded, deterministic per token
+let rowSpeeds = [];         // pixels/frame per strip — seeded, ~0.5–4 at 4K
+let rowHeights = [];        // mosaic row heights in pg pixels — assigned in setup()
+let rothkoZones = [];       // Rothko field zone rects — assigned in initRothkoScene()
+let animating = false;      // true while animation loop is running
+let stripsReady = false;    // guards one-time strip capture in initStrips()
 // full size file, 4K
 const fullWidth = 3840;
 const fullHeight = 2160;
@@ -1356,7 +1365,7 @@ function setup() {
 	const GAP = 0;
 	const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
 	const totalRaw = rawH.reduce((a, b) => a + b, 0);
-	const rowHeights = rawH.map((rh) =>
+	rowHeights = rawH.map((rh) =>
 		Math.max(3, Math.round((rh / totalRaw) * config.height)),
 	);
 	const hDrift = config.height - rowHeights.reduce((a, b) => a + b, 0);
