@@ -6,7 +6,9 @@ Rare tokens resolve into something quieter: broad stacked fields inspired by Rot
 
 ## UI
 
-Press **Space** to start/stop the row animation.
+Press **Space** to start/stop the row animation. Pausing freezes on the current frame.
+
+Press **r** to reset the animation and return to the static render.
 
 Press **s** to save the static render as an image.
 

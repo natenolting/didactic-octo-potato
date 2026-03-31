@@ -2204,7 +2204,8 @@ function draw() {
 	}
 
 	if (!animating) {
-		image(pg, 0, 0, width, height);
+		// Show frozen animation frame when paused; static pg before animation has started or after reset.
+		image(stripsReady ? animatedPg : pg, 0, 0, width, height);
 		return;
 	}
 
@@ -2262,6 +2263,22 @@ function keyPressed() {
 		} else {
 			noLoop();
 		}
+	}
+	if (key === "r" || key === "R") {
+		if (!pgReady) return;
+		// Reset animation — clears strips and returns to static pg view.
+		animating = false;
+		stripsReady = false;
+		rowStrips = [];
+		rowOffsets = [];
+		rowDirections = [];
+		rowSpeeds = [];
+		if (animatedPg) {
+			animatedPg.remove();
+			animatedPg = null;
+		}
+		noLoop();
+		redraw();
 	}
 }
 
