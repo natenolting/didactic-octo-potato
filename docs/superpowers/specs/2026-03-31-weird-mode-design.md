@@ -37,28 +37,55 @@ The row-position h-bias logic is bypassed when `newFills` is active — all cell
 
 ### Rendering
 
-New cases added to the cell drawing function (`applyCells()`) alongside the existing `"h"` and `"v"` pixel loops. All use the same `chroma.mix(fc, nc, inter, cell.mode)` interpolation — only the `inter` parameter changes.
+New cases added to the cell drawing function (`applyCells()`). d1, d2, and r use the **Canvas 2D gradient API** (`drawingContext.createLinearGradient` / `createRadialGradient`) rather than per-pixel rect() loops.
 
-In all formulas below, `x` and `y` are **cell-local pixel offsets** (0 to `cell.w - 1` and 0 to `cell.h - 1` respectively), and `w` and `h` are `cell.w` and `cell.h`. This matches the coordinate system used by the existing `"h"` and `"v"` loops.
+**Why not per-pixel loops:** The existing h/v cases draw 1D strips (one rect per column or row), scaling with cell width or height. A 2D pixel loop for diagonal/radial fills would call `rect(1,1)` once per pixel — up to 640×432 = 276K calls per cell for a sparse token. At 4K this makes the one-time pg render unacceptably slow. The Canvas 2D gradient API renders the fill in a single `fillRect` call.
 
-**`"d1"` — diagonal ↘**
+**Trade-off:** The drawingContext gradient interpolates in sRGB rather than the chroma color space specified by `cell.mode`. The color transition will differ slightly from h/v cells. This is acceptable for a 15% invisible modifier — the visual character (diagonal/radial direction) dominates over color-space precision.
+
+**Implementation pattern** — wrap each new case in `drawingContext.save()` / `restore()` to prevent the custom `fillStyle` from leaking into p5.js's internal state:
+
+**`"d1"` — diagonal ↘ (top-left → bottom-right)**
 ```javascript
-inter = (x / w + y / h) / 2;
+const grad = graphics.drawingContext.createLinearGradient(
+    cell.x, cell.y, cell.x + cell.w, cell.y + cell.h
+);
+grad.addColorStop(0, fc);
+grad.addColorStop(1, nc);
+graphics.drawingContext.save();
+graphics.drawingContext.fillStyle = grad;
+graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
+graphics.drawingContext.restore();
 ```
 
-**`"d2"` — diagonal ↙**
+**`"d2"` — diagonal ↙ (top-right → bottom-left)**
 ```javascript
-inter = ((w - x) / w + y / h) / 2;
+const grad = graphics.drawingContext.createLinearGradient(
+    cell.x + cell.w, cell.y, cell.x, cell.y + cell.h
+);
+grad.addColorStop(0, fc);
+grad.addColorStop(1, nc);
+graphics.drawingContext.save();
+graphics.drawingContext.fillStyle = grad;
+graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
+graphics.drawingContext.restore();
 ```
 
-**`"r"` — radial from center**
-```javascript
-const dx = x / w - 0.5;
-const dy = y / h - 0.5;
-inter = Math.min(1, Math.sqrt(dx * dx + dy * dy) * Math.SQRT2);
-```
+**`"r"` — radial from cell center outward**
 
-For d1/d2, `inter` is in the open interval (0, ~1) — it reaches 0 at the leading corner of d1 (x=0, y=0) and approaches but never quite reaches 1 at the trailing corner. This slight compression at the extremes is intentional: the first and last palette colors appear at near-full intensity but with a subtle gradient falloff at the cell edge. Radial is explicitly clamped via `Math.min(1, ...)` to handle corner pixels.
+Radius is set to the cell's corner distance so the gradient reaches full `nc` at the corners:
+```javascript
+const cx = cell.x + cell.w / 2;
+const cy = cell.y + cell.h / 2;
+const maxR = Math.sqrt((cell.w / 2) ** 2 + (cell.h / 2) ** 2);
+const grad = graphics.drawingContext.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+grad.addColorStop(0, fc);
+grad.addColorStop(1, nc);
+graphics.drawingContext.save();
+graphics.drawingContext.fillStyle = grad;
+graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
+graphics.drawingContext.restore();
+```
 
 ---
 
