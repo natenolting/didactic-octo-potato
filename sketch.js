@@ -1421,6 +1421,13 @@ function setup() {
 		yPos += rowHeights[y];
 	}
 
+	// Pixel sort modifier — burned after cell grid, before animSeed.
+	// All four values burned unconditionally so R() sequence is stable.
+	config.pixelSort          = R() < 0.15;
+	config.pixelSortDir       = R() < 0.5 ? "h" : "v";
+	config.pixelSortThreshold = 0.25 + R() * 0.5;
+	config.pixelSortTarget    = R() < 0.5 ? "bright" : "dark";
+
 	// Animation seed — burned last so it does not shift any prior R() calls.
 	// Seeded per-strip directions and speeds are deterministic per token.
 	config.animSeed = Math.round(R() * 0xffffffff);
