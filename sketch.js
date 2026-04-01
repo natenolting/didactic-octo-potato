@@ -2280,6 +2280,7 @@ function postProcessing(graphics, cfg, pal) {
 	);
 	applyPostProcess(graphics, cfg.grainAmt, cfg.grainSeed);
 	applyChromatic(graphics, cfg.chromaShift);
+	applyPixelSort(graphics, cfg);
 }
 
 /**
