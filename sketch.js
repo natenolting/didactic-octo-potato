@@ -1396,7 +1396,9 @@ function setup() {
 			dir = R() < hProb ? "h" : "v";
 		}
 		const mode = MODES[randomInt(R, 0, MODES.length - 1)];
-		dir === "h" ? hCount++ : vCount++;
+		if (dir === "h") hCount++;
+		else if (dir === "v") vCount++;
+		// d1, d2, r are not counted toward either flow direction
 
 		const isRestZone =
 			(rowNorm < 0.45 && R() < 0.4) || (rowNorm > 0.75 && R() < 0.3);
