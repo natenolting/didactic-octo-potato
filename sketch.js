@@ -1861,8 +1861,7 @@ function applyCells(graphics, palette, cells) {
 			}
 		} else if (cell.dir === "d1") {
 			// Diagonal ↘ — gradient from top-left to bottom-right.
-			// Uses drawingContext for performance (sRGB interpolation).
-			graphics.drawingContext.save();
+			// No save/restore — matches applyAtmosphere pattern for p5.js v2 compatibility.
 			const grad = graphics.drawingContext.createLinearGradient(
 				cell.x, cell.y,
 				cell.x + cell.w, cell.y + cell.h
@@ -1871,11 +1870,9 @@ function applyCells(graphics, palette, cells) {
 			grad.addColorStop(1, nc);
 			graphics.drawingContext.fillStyle = grad;
 			graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
-			graphics.drawingContext.restore();
 		} else if (cell.dir === "d2") {
 			// Diagonal ↙ — gradient from top-right to bottom-left.
-			// Uses drawingContext for performance (sRGB interpolation).
-			graphics.drawingContext.save();
+			// No save/restore — matches applyAtmosphere pattern for p5.js v2 compatibility.
 			const grad = graphics.drawingContext.createLinearGradient(
 				cell.x + cell.w, cell.y,
 				cell.x, cell.y + cell.h
@@ -1884,11 +1881,9 @@ function applyCells(graphics, palette, cells) {
 			grad.addColorStop(1, nc);
 			graphics.drawingContext.fillStyle = grad;
 			graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
-			graphics.drawingContext.restore();
 		} else if (cell.dir === "r") {
 			// Radial — gradient from cell center outward to corners.
-			// Uses drawingContext for performance (sRGB interpolation).
-			graphics.drawingContext.save();
+			// No save/restore — matches applyAtmosphere pattern for p5.js v2 compatibility.
 			const cx = cell.x + cell.w / 2;
 			const cy = cell.y + cell.h / 2;
 			const maxR = Math.sqrt((cell.w / 2) ** 2 + (cell.h / 2) ** 2);
@@ -1897,7 +1892,6 @@ function applyCells(graphics, palette, cells) {
 			grad.addColorStop(1, nc);
 			graphics.drawingContext.fillStyle = grad;
 			graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
-			graphics.drawingContext.restore();
 		} else {
 			// "h" — horizontal, and fallback for any unknown dir.
 			for (let g = 0; g < cell.w; g++) {
