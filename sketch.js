@@ -1363,6 +1363,8 @@ function setup() {
 		randomInt(R, 12, 20),
 	];
 
+	config.newFills = R() < 0.15;
+
 	// Build cell grid — layout only, no palette colors needed.
 	const GAP = 0;
 	const rawH = Array.from({ length: config.rows }, () => 0.3 + R() * 1.7);
