@@ -1853,37 +1853,39 @@ function applyCells(graphics, palette, cells) {
 		} else if (cell.dir === "d1") {
 			// Diagonal ↘ — gradient from top-left to bottom-right.
 			// Uses drawingContext for performance (sRGB interpolation).
+			graphics.drawingContext.save();
 			const grad = graphics.drawingContext.createLinearGradient(
 				cell.x, cell.y,
 				cell.x + cell.w, cell.y + cell.h
 			);
 			grad.addColorStop(0, fc);
 			grad.addColorStop(1, nc);
-			graphics.drawingContext.save();
 			graphics.drawingContext.fillStyle = grad;
 			graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
 			graphics.drawingContext.restore();
 		} else if (cell.dir === "d2") {
 			// Diagonal ↙ — gradient from top-right to bottom-left.
+			// Uses drawingContext for performance (sRGB interpolation).
+			graphics.drawingContext.save();
 			const grad = graphics.drawingContext.createLinearGradient(
 				cell.x + cell.w, cell.y,
 				cell.x, cell.y + cell.h
 			);
 			grad.addColorStop(0, fc);
 			grad.addColorStop(1, nc);
-			graphics.drawingContext.save();
 			graphics.drawingContext.fillStyle = grad;
 			graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
 			graphics.drawingContext.restore();
 		} else if (cell.dir === "r") {
 			// Radial — gradient from cell center outward to corners.
+			// Uses drawingContext for performance (sRGB interpolation).
+			graphics.drawingContext.save();
 			const cx = cell.x + cell.w / 2;
 			const cy = cell.y + cell.h / 2;
 			const maxR = Math.sqrt((cell.w / 2) ** 2 + (cell.h / 2) ** 2);
 			const grad = graphics.drawingContext.createRadialGradient(cx, cy, 0, cx, cy, maxR);
 			grad.addColorStop(0, fc);
 			grad.addColorStop(1, nc);
-			graphics.drawingContext.save();
 			graphics.drawingContext.fillStyle = grad;
 			graphics.drawingContext.fillRect(cell.x, cell.y, cell.w, cell.h);
 			graphics.drawingContext.restore();
