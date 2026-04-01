@@ -2192,6 +2192,81 @@ function initRothkoScene(graphics, cfg, pal) {
 	rothkoZones = zones;
 }
 
+/**
+ * Span-based pixel sort post-process. Sorts contiguous runs of qualifying
+ * pixels (above or below a luminance threshold) by luminance ascending,
+ * creating streaks in the horizontal or vertical scan direction.
+ * Only runs when cfg.pixelSort is true.
+ *
+ * @param {p5.Graphics} source - The pg buffer to sort in-place.
+ * @param {object} cfg - config object with pixelSort, pixelSortDir,
+ *                       pixelSortThreshold, and pixelSortTarget.
+ */
+function applyPixelSort(source, cfg) {
+	if (!cfg.pixelSort) return;
+	source.loadPixels();
+	const pix = source.pixels;
+	const w = source.width;
+	const h = source.height;
+	const threshold = cfg.pixelSortThreshold;
+	const bright = cfg.pixelSortTarget === "bright";
+
+	// Returns true if the pixel at pix[idx] qualifies for sorting.
+	function inSpan(idx) {
+		const lum = (0.2126 * pix[idx] + 0.7152 * pix[idx + 1] + 0.0722 * pix[idx + 2]) / 255;
+		return bright ? lum > threshold : lum < threshold;
+	}
+
+	// Sorts a collected span of pixel indices by luminance ascending (darkest first).
+	// Writes sorted values back to the original positions in the span.
+	function sortSpan(span) {
+		if (span.length < 2) return;
+		const data = span.map(idx => ({
+			r: pix[idx], g: pix[idx + 1], b: pix[idx + 2], a: pix[idx + 3],
+			lum: (0.2126 * pix[idx] + 0.7152 * pix[idx + 1] + 0.0722 * pix[idx + 2]) / 255,
+		}));
+		data.sort((a, b) => a.lum - b.lum);
+		span.forEach((origIdx, i) => {
+			pix[origIdx]     = data[i].r;
+			pix[origIdx + 1] = data[i].g;
+			pix[origIdx + 2] = data[i].b;
+			pix[origIdx + 3] = data[i].a;
+		});
+	}
+
+	if (cfg.pixelSortDir === "h") {
+		for (let y = 0; y < h; y++) {
+			let span = [];
+			for (let x = 0; x < w; x++) {
+				const idx = (y * w + x) * 4;
+				if (inSpan(idx)) {
+					span.push(idx);
+				} else {
+					sortSpan(span);
+					span = [];
+				}
+			}
+			sortSpan(span); // flush span at end of row
+		}
+	} else {
+		for (let x = 0; x < w; x++) {
+			let span = [];
+			for (let y = 0; y < h; y++) {
+				const idx = (y * w + x) * 4;
+				if (inSpan(idx)) {
+					span.push(idx);
+				} else {
+					sortSpan(span);
+					span = [];
+				}
+			}
+			sortSpan(span); // flush span at end of column
+		}
+	}
+
+	source.updatePixels();
+}
+
 function postProcessing(graphics, cfg, pal) {
 	// --- Shared post-processing — same as normal mode, applied once to full buffer ---
 	// applyAtmosphere washes only the top ~45% of the canvas (hardcoded in its implementation)
