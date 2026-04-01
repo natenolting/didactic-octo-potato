@@ -1386,7 +1386,15 @@ function setup() {
 		const cellH = Math.max(2, rowHeights[y] - GAP);
 		const rowNorm = y / config.rows;
 		const hProb = rowNorm < 0.4 ? 0.85 : rowNorm < 0.7 ? 0.6 : 0.35;
-		const dir = R() < hProb ? "h" : "v";
+		let dir;
+		if (config.newFills) {
+			// Expanded pool: h 40%, v 20%, d1 15%, d2 15%, r 10%.
+			// Row-position h-bias is bypassed when newFills is active.
+			const d = R();
+			dir = d < 0.40 ? "h" : d < 0.60 ? "v" : d < 0.75 ? "d1" : d < 0.90 ? "d2" : "r";
+		} else {
+			dir = R() < hProb ? "h" : "v";
+		}
 		const mode = MODES[randomInt(R, 0, MODES.length - 1)];
 		dir === "h" ? hCount++ : vCount++;
 
